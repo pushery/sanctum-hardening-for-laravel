@@ -1,0 +1,54 @@
+<?php
+
+declare(strict_types=1);
+
+return [
+    // The detail of the problem document a throttled request is answered with.
+    'throttled' => 'Te veel verzoeken. Een nieuw verzoek kan worden verstuurd zodra de tijd in de header Retry-After voorbij is.',
+    // The self-service screen of a user's tokens.
+    'screen' => [
+        'heading' => 'API-tokens',
+        'intro' => 'Een token kan wat zijn bevoegdheden noemen, en nooit meer dan je account.',
+        'name' => 'Naam',
+        'abilities' => 'Bevoegdheden',
+        'lifetime' => 'Looptijd',
+        'days' => ':count dag|:count dagen',
+        'no_expiry' => 'Geen vervaldatum',
+        'mint' => 'Token aanmaken',
+        'copy_now' => 'Kopieer het token nu. Het wordt alleen deze ene keer getoond.',
+        'minted' => 'Het token is aangemaakt.',
+        'revoke' => 'Intrekken',
+        'revoke_named' => ':name intrekken',
+        'confirm_revoke' => 'Dit token intrekken? Verzoeken die het gebruiken, werken dan niet meer.',
+        'revoked' => 'Het token is ingetrokken.',
+        'not_revoked' => 'Er is geen token ingetrokken.',
+        'none' => 'Nog geen tokens.',
+        'prefix' => 'Prefix',
+        'expires' => 'Verloopt',
+        'last_used' => 'Laatst gebruikt',
+        'never' => 'Nooit',
+        // How a date and a moment read on the screen, in the reader's language. German writes
+        // "Uhr" after a clock time.
+        'formats' => [
+            'date' => 'L',
+            'moment' => 'L LT',
+        ],
+        'quickstart' => 'Snelstart',
+        'quickstart_endpoint' => 'Stuur een verzoek met het token naar',
+        'quickstart_limits' => 'Elk token doet tot :token verzoeken per minuut, en een account tot :user over al zijn tokens.',
+        // Why a token was not minted, by the reason of the refusal.
+        'refused' => [
+            'none' => 'Kies minstens één bevoegdheid.',
+            'wildcard' => 'Een token kan niet alle bevoegdheden tegelijk dragen.',
+            'unknown' => 'Een van de bevoegdheden wordt niet aangeboden.',
+            'reserved' => 'Een van de bevoegdheden wordt hier niet aangeboden.',
+            'malformed' => 'Een van de bevoegdheden wordt niet aangeboden.',
+            'not_tokenable' => 'Voor dit account kunnen geen tokens worden aangemaakt.',
+            'password_not_confirmed' => 'Bevestig je wachtwoord voordat je een token aanmaakt.',
+            'too_fast' => 'Er worden te snel tokens aangemaakt. Probeer het zo opnieuw.',
+            'limit_reached' => 'Je hebt zoveel tokens als toegestaan. Trek er eerst een in.',
+            'lifetime' => 'Deze looptijd wordt niet aangeboden.',
+            'name' => 'Geef het token een naam van hoogstens 255 tekens.',
+        ],
+    ],
+];
