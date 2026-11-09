@@ -26,7 +26,11 @@ return [
         'prefix' => 'Prefisso',
         'expires' => 'Scade',
         'last_used' => 'Ultimo uso',
+        'recent' => 'Richieste recenti',
         'never' => 'Mai',
+        'networks' => 'Reti',
+        'networks_hint' => 'Facoltativo. Un indirizzo o una rete per riga, ad esempio 203.0.113.7 o 10.0.0.0/8. Il token funziona allora solo da lì.',
+        'only_from' => 'Solo da :networks',
         // How a date and a moment read on the screen, in the reader's language. German writes
         // "Uhr" after a clock time.
         'formats' => [
@@ -49,6 +53,7 @@ return [
             'limit_reached' => 'Hai tutti i token consentiti. Revocane prima uno.',
             'lifetime' => 'Questa durata non è offerta.',
             'name' => 'Dai al token un nome di al massimo 255 caratteri.',
+            'network' => 'Uno degli indirizzi o delle reti non può limitare un token.',
         ],
     ],
 ];

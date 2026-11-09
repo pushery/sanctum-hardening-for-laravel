@@ -88,7 +88,9 @@ know, and a reserved ability belongs to the application's own code. `php artisan
 sanctum-hardening:doctor` names the tokens minted outside the package that carry either. See
 [Abilities](https://docs.pushery.com/sanctum-hardening-for-laravel/abilities). Schedule
 `sanctum-hardening:prune-prefixes` beside `sanctum:prune-expired`, which deletes tokens without the
-model events the package listens to.
+model events the package listens to, and `sanctum-hardening:prune-revocations`: a revoked token keeps
+its row, expired, with a record of who revoked it and when, until `revocations.keep_days` days have
+passed.
 
 ### Minting with limits
 
@@ -101,7 +103,9 @@ $minted = app(PersonalTokens::class)->mint($request, 'CI', ['orders:read'], 90);
 A token is minted behind a password confirmed a moment ago, at most 20 per user and 5 a minute,
 one at a time, with a lifetime from a list. `mintFor($request, $workspace, …)` mints a token that
 belongs to a workspace under the same rules, where the application's Gate lets the user manage its
-tokens. See [Minting](https://docs.pushery.com/sanctum-hardening-for-laravel/minting).
+tokens. Every mint takes the addresses and networks a token may be used from as its last argument,
+and a request from anywhere else is refused like an unknown token. See
+[Minting](https://docs.pushery.com/sanctum-hardening-for-laravel/minting).
 
 ### Throttling and the switch
 
@@ -115,7 +119,9 @@ SanctumHardening::routes(function () {
 
 The API runs behind a limit per token and one per user over all of their tokens, and answers
 `429` as a problem document. `SANCTUM_HARDENING_ENABLED=false` removes its routes altogether, and
-the last use of a token is written once a minute instead of on every request. See
+the last use of a token is written once a minute instead of on every request. Every request is
+recorded with its route, method and status, never the values it carried, and
+`sanctum-hardening:prune-uses` deletes the records after `usage.keep_days` days. See
 [Throttling and the switch](https://docs.pushery.com/sanctum-hardening-for-laravel/throttling).
 
 ### The screen

@@ -9,13 +9,14 @@ use RuntimeException;
 /**
  * A token was not minted: the model cannot hold tokens, the signed-in user may not manage the tokens
  * of another tokenable, the password was not confirmed a moment ago, tokens are minted too fast or
- * the tokenable holds as many as allowed, the lifetime asked for is none of the allowed ones, or the
- * name is empty or longer than a token's name may be.
+ * the tokenable holds as many as allowed, the lifetime asked for is none of the allowed ones, the
+ * name is empty or longer than a token's name may be, or an entry of the networks a token is limited
+ * to is no address and no network.
  */
 final class MintRefused extends RuntimeException
 {
     /**
-     * @param  'not_tokenable'|'not_allowed'|'password_not_confirmed'|'too_fast'|'limit_reached'|'lifetime'|'name'  $reason
+     * @param  'not_tokenable'|'not_allowed'|'password_not_confirmed'|'too_fast'|'limit_reached'|'lifetime'|'name'|'network'  $reason
      */
     private function __construct(
         public readonly string $reason,
@@ -54,6 +55,11 @@ final class MintRefused extends RuntimeException
     public static function name(int $longest): self
     {
         return new self('name', "A token needs a name of 1 to {$longest} characters.");
+    }
+
+    public static function network(string $entry): self
+    {
+        return new self('network', "[{$entry}] is no IPv4 or IPv6 address and no network in CIDR notation, so a token cannot be limited to it.");
     }
 
     public static function lifetime(int $days): self

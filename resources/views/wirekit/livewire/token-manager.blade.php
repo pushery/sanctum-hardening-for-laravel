@@ -34,6 +34,8 @@
                     @endif
                 </x-wirekit::select>
 
+                <x-wirekit::textarea wire:model="networks" name="networks" rows="3" :label="$lang->get('sanctum-hardening::messages.screen.networks')" :hint="$lang->get('sanctum-hardening::messages.screen.networks_hint')" />
+
                 <x-wirekit::button type="submit">{{ $lang->get('sanctum-hardening::messages.screen.mint') }}</x-wirekit::button>
             </x-wirekit::stack>
         </form>
@@ -54,11 +56,21 @@
                     <x-wirekit::table.row wire:key="token-{{ $token->getKey() }}">
                         <x-wirekit::table.td>{{ $token->getAttribute('name') }}</x-wirekit::table.td>
                         <x-wirekit::table.td><x-wirekit::code>{{ $prefixes[$token->getKey()] ?? '' }}</x-wirekit::code></x-wirekit::table.td>
-                        <x-wirekit::table.td>{{ implode(', ', array_map(static fn (mixed $ability): string => is_string($ability) ? ($grantable[$ability] ?? $ability) : '', (array) $token->getAttribute('abilities'))) }}</x-wirekit::table.td>
-                        <x-wirekit::table.td>{{ $token->getAttribute('expires_at')?->locale($lang->getLocale())->isoFormat($lang->get('sanctum-hardening::messages.screen.formats.date')) ?? $lang->get('sanctum-hardening::messages.screen.never') }}</x-wirekit::table.td>
-                        <x-wirekit::table.td>{{ $token->getAttribute('last_used_at')?->locale($lang->getLocale())->isoFormat($lang->get('sanctum-hardening::messages.screen.formats.moment')) ?? $lang->get('sanctum-hardening::messages.screen.never') }}</x-wirekit::table.td>
                         <x-wirekit::table.td>
-                            <x-wirekit::button type="button" variant="danger" wire:click="revoke('{{ $token->getKey() }}')" wire:confirm="{{ $lang->get('sanctum-hardening::messages.screen.confirm_revoke') }}" aria-label="{{ $lang->get('sanctum-hardening::messages.screen.revoke_named', ['name' => $token->getAttribute('name')]) }}">
+                            {{ implode(', ', array_map(static fn (mixed $ability): string => is_string($ability) ? ($grantable[$ability] ?? $ability) : '', (array) $token->getAttribute('abilities'))) }}
+                            @if (($limits[(string) $token->getKey()] ?? []) !== [])
+                                <x-wirekit::text size="sm" intent="muted" leading="tight" break="anywhere">{{ $lang->get('sanctum-hardening::messages.screen.only_from', ['networks' => implode(', ', $limits[(string) $token->getKey()])]) }}</x-wirekit::text>
+                            @endif
+                        </x-wirekit::table.td>
+                        <x-wirekit::table.td>{{ $token->getAttribute('expires_at')?->locale($lang->getLocale())->isoFormat($lang->get('sanctum-hardening::messages.screen.formats.date')) ?? $lang->get('sanctum-hardening::messages.screen.never') }}</x-wirekit::table.td>
+                        <x-wirekit::table.td>
+                            {{ $token->getAttribute('last_used_at')?->locale($lang->getLocale())->isoFormat($lang->get('sanctum-hardening::messages.screen.formats.moment')) ?? $lang->get('sanctum-hardening::messages.screen.never') }}
+                            @if (($uses[(string) $token->getKey()] ?? []) !== [])
+                                <x-wirekit::list type="none" :items="$uses[(string) $token->getKey()]" :aria-label="$lang->get('sanctum-hardening::messages.screen.recent')" />
+                            @endif
+                        </x-wirekit::table.td>
+                        <x-wirekit::table.td>
+                            <x-wirekit::button type="button" intent="danger" wire:click="revoke('{{ $token->getKey() }}')" wire:confirm="{{ $lang->get('sanctum-hardening::messages.screen.confirm_revoke') }}" aria-label="{{ $lang->get('sanctum-hardening::messages.screen.revoke_named', ['name' => $token->getAttribute('name')]) }}">
                                 {{ $lang->get('sanctum-hardening::messages.screen.revoke') }}
                             </x-wirekit::button>
                         </x-wirekit::table.td>

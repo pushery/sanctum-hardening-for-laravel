@@ -33,6 +33,12 @@ use Pushery\SanctumHardening\Abilities\AbilityRefused;
  * The application's own code mints through mintForSystem(): a reserved ability is allowed there, and
  * no limit of the self-service applies. A token that carries a reserved ability stays out of the
  * self-service's list and cannot be revoked there.
+ *
+ * A token revoked here is not deleted: TokenRevocations expires it and records who revoked it and
+ * when, and it leaves the list.
+ *
+ * Every mint takes the addresses and networks the token is limited to, none by default; see
+ * TokenNetworks.
  */
 final readonly class PersonalTokens
 {
@@ -46,6 +52,8 @@ final readonly class PersonalTokens
         private RateLimiter $limiter,
         private ResolvesTokenLimit $limits,
         private TokenPrefixes $prefixes,
+        private TokenRevocations $revocations,
+        private TokenNetworks $networks,
     ) {}
 
     /**
@@ -53,10 +61,11 @@ final readonly class PersonalTokens
      *
      * @param  array<array-key, mixed>  $abilities
      * @param  int|null  $days  one of the configured lifetimes, 0 for none where that is allowed, null for the default
+     * @param  array<array-key, mixed>  $networks  the addresses and networks the token is limited to, none for no limit
      *
      * @throws AbilityRefused|MintRefused
      */
-    public function mint(Request $request, string $name, array $abilities, ?int $days = null): NewAccessToken
+    public function mint(Request $request, string $name, array $abilities, ?int $days = null, array $networks = []): NewAccessToken
     {
         $user = $request->user();
 
@@ -64,7 +73,7 @@ final readonly class PersonalTokens
             throw MintRefused::notTokenable();
         }
 
-        return $this->mintFor($request, $user, $name, $abilities, $days);
+        return $this->mintFor($request, $user, $name, $abilities, $days, $networks);
     }
 
     /**
@@ -74,10 +83,11 @@ final readonly class PersonalTokens
      *
      * @param  array<array-key, mixed>  $abilities
      * @param  int|null  $days  one of the configured lifetimes, 0 for none where that is allowed, null for the default
+     * @param  array<array-key, mixed>  $networks  the addresses and networks the token is limited to, none for no limit
      *
      * @throws AbilityRefused|MintRefused
      */
-    public function mintFor(Request $request, Model $tokenable, string $name, array $abilities, ?int $days = null): NewAccessToken
+    public function mintFor(Request $request, Model $tokenable, string $name, array $abilities, ?int $days = null, array $networks = []): NewAccessToken
     {
         if (! method_exists($tokenable, 'createToken')) {
             throw MintRefused::notTokenable();
@@ -94,6 +104,7 @@ final readonly class PersonalTokens
         $this->refuseUnnamed($name);
 
         $granted = $this->catalog->check($abilities);
+        $limitedTo = TokenNetworks::checked($networks);
         $expiresAt = $this->expiryFor($days);
         $holder = 'sanctum-hardening:mint:'.$tokenable->getMorphClass().':'.TokenPrefixes::key($tokenable->getKey());
 
@@ -122,6 +133,7 @@ final readonly class PersonalTokens
             // Only a token that was minted counts against the minute, so a refused request costs nothing.
             $this->limiter->hit($holder, 60);
             $this->prefixes->record($minted);
+            $this->networks->restrict($minted->accessToken, $limitedTo);
 
             return $minted;
         } finally {
@@ -134,10 +146,11 @@ final readonly class PersonalTokens
      * allowed, and neither the password nor a limit of the self-service is asked.
      *
      * @param  array<array-key, mixed>  $abilities
+     * @param  array<array-key, mixed>  $networks  the addresses and networks the token is limited to, none for no limit
      *
      * @throws AbilityRefused|MintRefused
      */
-    public function mintForSystem(Model $user, string $name, array $abilities, ?DateTimeInterface $expiresAt = null): NewAccessToken
+    public function mintForSystem(Model $user, string $name, array $abilities, ?DateTimeInterface $expiresAt = null, array $networks = []): NewAccessToken
     {
         if (! method_exists($user, 'createToken')) {
             throw MintRefused::notTokenable();
@@ -145,18 +158,21 @@ final readonly class PersonalTokens
 
         $this->refuseUnnamed($name);
 
-        $created = $user->createToken($name, $this->catalog->check($abilities, system: true), $expiresAt);
+        $granted = $this->catalog->check($abilities, system: true);
+        $limitedTo = TokenNetworks::checked($networks);
+        $created = $user->createToken($name, $granted, $expiresAt);
         $minted = $created instanceof NewAccessToken ? $created : throw new LogicException('createToken() answered something other than a NewAccessToken.');
         $this->prefixes->record($minted);
+        $this->networks->restrict($minted->accessToken, $limitedTo);
 
         return $minted;
     }
 
     /**
      * The tokens the self-service shows: those of the signed-in user of the request, or of `$tokenable`
-     * where the Gate lets that user manage them. Every one without a reserved ability, the newest
-     * first, an expired one included until it is revoked or pruned. A guest, or a user the Gate does
-     * not allow, sees none.
+     * where the Gate lets that user manage them. Every one without a reserved ability that was not
+     * revoked, the newest first, an expired one included until it is pruned. A guest, or a user the
+     * Gate does not allow, sees none.
      *
      * @return Collection<int, Model>
      */
@@ -169,13 +185,20 @@ final readonly class PersonalTokens
 
     /**
      * Revoke one token of the list listFor() gives for the same request and tokenable, never one with
-     * a reserved ability; whether one was revoked.
+     * a reserved ability, as the signed-in user of the request; whether one was revoked.
      */
     public function revoke(Request $request, int|string $tokenId, ?Model $tokenable = null): bool
     {
         $token = $this->listFor($request, $tokenable)->first(static fn (Model $token): bool => TokenPrefixes::key($token->getKey()) === (string) $tokenId);
 
-        return $token instanceof Model && $token->delete() === true;
+        if (! $token instanceof Model) {
+            return false;
+        }
+
+        $by = $request->user();
+        $this->revocations->revoke($token, $by instanceof Model ? $by : null);
+
+        return true;
     }
 
     /**
@@ -207,7 +230,8 @@ final readonly class PersonalTokens
     }
 
     /**
-     * The tokens of a tokenable the self-service sees, the ones that have not expired alone where `$live`.
+     * The tokens of a tokenable the self-service sees, without the revoked ones, and the ones that have
+     * not expired alone where `$live`.
      *
      * @return Collection<int, Model>
      */
@@ -215,13 +239,17 @@ final readonly class PersonalTokens
     {
         $model = Tokens::model();
 
-        // A tokenable holds a handful of tokens, so the expired ones are told apart here rather than in SQL.
-        return $model->newQuery()
+        // A tokenable holds a handful of tokens, so the expired and the revoked ones are told apart here
+        // rather than in SQL.
+        $tokens = $model->newQuery()
             ->where($model->qualifyColumn('tokenable_type'), $tokenable->getMorphClass())
             ->where($model->qualifyColumn('tokenable_id'), $tokenable->getKey())
             ->orderByDesc($model->getKeyName())
-            ->get()
-            ->reject(fn (Model $token): bool => $this->catalog->holdsReserved(Tokens::abilitiesOf($token)) || ($live && Tokens::expired($token)))
+            ->get();
+        $revoked = $this->revocations->among($tokens);
+
+        return $tokens
+            ->reject(fn (Model $token): bool => in_array(TokenPrefixes::key($token->getKey()), $revoked, true) || $this->catalog->holdsReserved(Tokens::abilitiesOf($token)) || ($live && Tokens::expired($token)))
             ->values();
     }
 

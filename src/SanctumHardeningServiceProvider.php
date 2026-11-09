@@ -17,12 +17,15 @@ use Override;
 use Pushery\SanctumHardening\Abilities\AbilityCatalog;
 use Pushery\SanctumHardening\Console\DoctorCommand;
 use Pushery\SanctumHardening\Console\PrunePrefixesCommand;
+use Pushery\SanctumHardening\Console\PruneRevocationsCommand;
+use Pushery\SanctumHardening\Console\PruneUsesCommand;
 use Pushery\SanctumHardening\Livewire\TokenManager;
 use Pushery\SanctumHardening\Support\LanguageFallbackLoader;
 use Pushery\SanctumHardening\Throttling\TokenThrottle;
 use Pushery\SanctumHardening\Tokens\LastUsedThrottle;
 use Pushery\SanctumHardening\Tokens\NoTokenLimit;
 use Pushery\SanctumHardening\Tokens\ResolvesTokenLimit;
+use Pushery\SanctumHardening\Tokens\TokenNetworks;
 use Pushery\SanctumHardening\Tokens\TokenPrefixes;
 
 final class SanctumHardeningServiceProvider extends ServiceProvider
@@ -81,11 +84,16 @@ final class SanctumHardeningServiceProvider extends ServiceProvider
             Event::listen('eloquent.saving: '.$model, static fn (Model $token): ?bool => LastUsedThrottle::holdsBack($token) ? false : null);
             Event::listen('eloquent.deleted: '.$model, function (Model $token): void {
                 $this->app->make(TokenPrefixes::class)->forget($token->getKey());
+                $this->app->make(TokenNetworks::class)->forget($token->getKey());
             });
+
+            // After the application's own boot() as well, so a callback it gave Sanctum there keeps
+            // answering inside the package's check of a token's networks.
+            TokenNetworks::guardSanctum();
         });
 
         if ($this->app->runningInConsole()) {
-            $this->commands([DoctorCommand::class, PrunePrefixesCommand::class]);
+            $this->commands([DoctorCommand::class, PrunePrefixesCommand::class, PruneRevocationsCommand::class, PruneUsesCommand::class]);
             $this->registerPublishing();
         }
     }

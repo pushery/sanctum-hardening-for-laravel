@@ -46,6 +46,12 @@
             </select>
         </div>
 
+        <div>
+            <label for="sanctum-hardening-token-networks">{{ $lang->get('sanctum-hardening::messages.screen.networks') }}</label>
+            <textarea id="sanctum-hardening-token-networks" wire:model="networks" rows="3" aria-describedby="sanctum-hardening-token-networks-hint"></textarea>
+            <p id="sanctum-hardening-token-networks-hint">{{ $lang->get('sanctum-hardening::messages.screen.networks_hint') }}</p>
+        </div>
+
         <button type="submit">{{ $lang->get('sanctum-hardening::messages.screen.mint') }}</button>
     </form>
 
@@ -65,9 +71,23 @@
                 <tr wire:key="token-{{ $token->getKey() }}">
                     <td>{{ $token->getAttribute('name') }}</td>
                     <td><code>{{ $prefixes[$token->getKey()] ?? '' }}</code></td>
-                    <td>{{ implode(', ', array_map(static fn (mixed $ability): string => is_string($ability) ? ($grantable[$ability] ?? $ability) : '', (array) $token->getAttribute('abilities'))) }}</td>
+                    <td>
+                        {{ implode(', ', array_map(static fn (mixed $ability): string => is_string($ability) ? ($grantable[$ability] ?? $ability) : '', (array) $token->getAttribute('abilities'))) }}
+                        @if (($limits[(string) $token->getKey()] ?? []) !== [])
+                            <div><small>{{ $lang->get('sanctum-hardening::messages.screen.only_from', ['networks' => implode(', ', $limits[(string) $token->getKey()])]) }}</small></div>
+                        @endif
+                    </td>
                     <td>{{ $token->getAttribute('expires_at')?->locale($lang->getLocale())->isoFormat($lang->get('sanctum-hardening::messages.screen.formats.date')) ?? $lang->get('sanctum-hardening::messages.screen.never') }}</td>
-                    <td>{{ $token->getAttribute('last_used_at')?->locale($lang->getLocale())->isoFormat($lang->get('sanctum-hardening::messages.screen.formats.moment')) ?? $lang->get('sanctum-hardening::messages.screen.never') }}</td>
+                    <td>
+                        {{ $token->getAttribute('last_used_at')?->locale($lang->getLocale())->isoFormat($lang->get('sanctum-hardening::messages.screen.formats.moment')) ?? $lang->get('sanctum-hardening::messages.screen.never') }}
+                        @if (($uses[(string) $token->getKey()] ?? []) !== [])
+                            <ul aria-label="{{ $lang->get('sanctum-hardening::messages.screen.recent') }}">
+                                @foreach ($uses[(string) $token->getKey()] as $use)
+                                    <li>{{ $use['text'] }} <small>{{ $use['meta'] }}</small></li>
+                                @endforeach
+                            </ul>
+                        @endif
+                    </td>
                     <td>
                         <button type="button" wire:click="revoke('{{ $token->getKey() }}')" wire:confirm="{{ $lang->get('sanctum-hardening::messages.screen.confirm_revoke') }}" aria-label="{{ $lang->get('sanctum-hardening::messages.screen.revoke_named', ['name' => $token->getAttribute('name')]) }}">
                             {{ $lang->get('sanctum-hardening::messages.screen.revoke') }}
