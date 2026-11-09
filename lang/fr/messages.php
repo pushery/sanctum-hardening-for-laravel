@@ -26,7 +26,11 @@ return [
         'prefix' => 'Préfixe',
         'expires' => 'Expire',
         'last_used' => 'Dernière utilisation',
+        'recent' => 'Requêtes récentes',
         'never' => 'Jamais',
+        'networks' => 'Réseaux',
+        'networks_hint' => 'Facultatif. Une adresse ou un réseau par ligne, par exemple 203.0.113.7 ou 10.0.0.0/8. Le jeton ne fonctionne alors que depuis ceux-ci.',
+        'only_from' => 'Uniquement depuis :networks',
         // How a date and a moment read on the screen, in the reader's language. German writes
         // "Uhr" after a clock time.
         'formats' => [
@@ -49,6 +53,7 @@ return [
             'limit_reached' => 'Tu as autant de jetons que permis. Révoques-en un d’abord.',
             'lifetime' => 'Cette durée n’est pas proposée.',
             'name' => 'Donne au jeton un nom de 255 caractères au plus.',
+            'network' => 'L’une des adresses ou l’un des réseaux ne peut pas limiter un jeton.',
         ],
     ],
 ];

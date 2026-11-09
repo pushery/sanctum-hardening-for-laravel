@@ -26,7 +26,11 @@ return [
         'prefix' => 'Prefix',
         'expires' => 'Verloopt',
         'last_used' => 'Laatst gebruikt',
+        'recent' => 'Recente verzoeken',
         'never' => 'Nooit',
+        'networks' => 'Netwerken',
+        'networks_hint' => 'Optioneel. Eén adres of netwerk per regel, zoals 203.0.113.7 of 10.0.0.0/8. Het token werkt dan alleen vanaf daar.',
+        'only_from' => 'Alleen vanaf :networks',
         // How a date and a moment read on the screen, in the reader's language. German writes
         // "Uhr" after a clock time.
         'formats' => [
@@ -49,6 +53,7 @@ return [
             'limit_reached' => 'Je hebt zoveel tokens als toegestaan. Trek er eerst een in.',
             'lifetime' => 'Deze looptijd wordt niet aangeboden.',
             'name' => 'Geef het token een naam van hoogstens 255 tekens.',
+            'network' => 'Een van de adressen of netwerken kan een token niet beperken.',
         ],
     ],
 ];

@@ -135,6 +135,35 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Revocations
+    |--------------------------------------------------------------------------
+    | A revoked token keeps its row, expired from the moment it was revoked, with a record of who
+    | revoked it and when. `sanctum-hardening:prune-revocations` deletes both once `keep_days`
+    | days have passed; schedule it daily.
+    */
+    'revocations' => [
+        'keep_days' => is_numeric($revocationDays = env('SANCTUM_HARDENING_REVOCATIONS_KEEP_DAYS')) && (int) $revocationDays >= 1
+            ? (int) $revocationDays
+            : 90,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Usage
+    |--------------------------------------------------------------------------
+    | Every request a token makes through SanctumHardening::routes() is recorded with its route,
+    | method and status, at most once every `every` seconds for the same ones, and kept for
+    | `keep_days` days. `sanctum-hardening:prune-uses` deletes the older ones; schedule it daily.
+    */
+    'usage' => [
+        'every' => 60,
+        'keep_days' => is_numeric($usageDays = env('SANCTUM_HARDENING_USAGE_KEEP_DAYS')) && (int) $usageDays >= 1
+            ? (int) $usageDays
+            : 30,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Screen
     |--------------------------------------------------------------------------
     | The view set of the self-service screen, <livewire:sanctum-hardening.tokens />:

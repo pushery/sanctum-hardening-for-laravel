@@ -26,7 +26,11 @@ return [
         'prefix' => 'Präfix',
         'expires' => 'Läuft ab',
         'last_used' => 'Zuletzt genutzt',
+        'recent' => 'Letzte Anfragen',
         'never' => 'Nie',
+        'networks' => 'Netze',
+        'networks_hint' => 'Optional. Eine Adresse oder ein Netz je Zeile, etwa 203.0.113.7 oder 10.0.0.0/8. Das Token funktioniert dann nur von dort.',
+        'only_from' => 'Nur von :networks',
         // How a date and a moment read on the screen, in the reader's language. German writes
         // "Uhr" after a clock time.
         'formats' => [
@@ -49,6 +53,7 @@ return [
             'limit_reached' => 'Du hast so viele Tokens wie erlaubt. Widerrufe zuerst eines.',
             'lifetime' => 'Diese Laufzeit wird nicht angeboten.',
             'name' => 'Gib dem Token einen Namen mit höchstens 255 Zeichen.',
+            'network' => 'Eine der Adressen oder eines der Netze taugt nicht als Beschränkung eines Tokens.',
         ],
     ],
 ];

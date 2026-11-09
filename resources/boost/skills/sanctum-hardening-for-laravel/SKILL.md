@@ -51,7 +51,8 @@ Mint through `PersonalTokens::mint()` on a route behind `password.confirm`, neve
 `createToken()` and its wildcard default. Mint a token that belongs to a workspace or another
 model through `mintFor()`, and define the Gate ability `manage-tokens` (or a policy method
 `manageTokens()`) that says who may manage its tokens. Mint a device or service token through
-`mintForSystem()`. Register the API's routes with `SanctumHardening::routes()`, which puts them
+`mintForSystem()`. Every mint takes the addresses and networks (IPv4, IPv6, CIDR) a token may be used
+from as its last argument; `TokenNetworks::restrict()` changes them later. Register the API's routes with `SanctumHardening::routes()`, which puts them
 behind `auth:sanctum` and the package's limiter and registers none while the API is switched off.
 
 An application with Livewire embeds the self-service screen, `<livewire:sanctum-hardening.tokens />`, on a
@@ -59,7 +60,12 @@ page behind `auth` and `password.confirm`.
 
 Run `php artisan sanctum-hardening:doctor` after installing: it names the tokens that already carry
 the wildcard or an ability the catalog does not know. Schedule `sanctum-hardening:prune-prefixes`
-beside `sanctum:prune-expired`, whose query deletes leave the prefixes of the pruned tokens behind.
+beside `sanctum:prune-expired`, whose query deletes leave the prefixes of the pruned tokens behind, and
+`sanctum-hardening:prune-revocations`. A revoked token is not deleted: it is expired and recorded with
+the user who revoked it; revoke from the application's own code through
+`TokenRevocations::revoke($token, $by)`. Every request through `SanctumHardening::routes()` is
+recorded with its route, method and status, never the values it carried, and the screen lists the
+latest of each token; schedule `sanctum-hardening:prune-uses` daily to delete the older ones.
 
 ## Examples
 

@@ -8,6 +8,7 @@ use Closure;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Facades\Route;
+use Pushery\SanctumHardening\Http\RecordsTokenUse;
 
 /**
  * The API of an application, behind Sanctum's token guard and the package's throttle, and the switch
@@ -29,7 +30,8 @@ final class SanctumHardening
 
     /**
      * Register the application's API routes under the configured prefix, behind the configured
-     * middleware and the throttle of the package's limiter, or none at all while the API is off.
+     * middleware and the throttle of the package's limiter, or none at all while the API is off. Every
+     * request a token makes there is recorded, see TokenUses.
      */
     public static function routes(Closure $routes): void
     {
@@ -43,6 +45,7 @@ final class SanctumHardening
         Route::prefix(is_string($prefix) ? $prefix : 'api')
             ->middleware([
                 ...self::middleware(),
+                RecordsTokenUse::class,
                 'throttle:'.(is_string($limiter) && $limiter !== '' ? $limiter : 'sanctum-hardening'),
             ])
             ->group($routes);
