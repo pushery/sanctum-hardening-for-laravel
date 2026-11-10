@@ -9,9 +9,11 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Routing\UrlGenerator;
 use Illuminate\Contracts\Translation\Translator;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\View as ViewFactory;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Pushery\SanctumHardening\Abilities\AbilityCatalog;
 use Pushery\SanctumHardening\Abilities\AbilityRefused;
@@ -31,9 +33,24 @@ use Pushery\WireKit\WireKitServiceProvider;
  * Every rule is the one PersonalTokens applies, so the screen offers nothing a mint would refuse: no
  * reserved ability, no lifetime off the list. The plain text of a token exists once, on the answer to
  * its mint, and is gone with the next action.
+ *
+ * Given a `tokenable`, `<livewire:sanctum-hardening.tokens :tokenable="$workspace" />`, the screen
+ * manages that holder's tokens instead, where the application's Gate lets the signed-in user, and its
+ * texts speak of the holder rather than of the account. Where the password was not confirmed a moment
+ * ago, the screen asks for it itself, so it needs no `password.confirm` route on its host.
  */
 final class TokenManager extends Component
 {
+    /**
+     * The holder whose tokens the screen manages: null for the signed-in user. Locked, so no request
+     * points the screen at another holder; PersonalTokens asks the Gate about it on every action as well.
+     */
+    #[Locked]
+    public ?Model $tokenable = null;
+
+    /** The password typed to confirm it on the screen, cleared on every attempt. */
+    public string $password = '';
+
     public string $name = '';
 
     /** @var list<string> */
@@ -68,7 +85,10 @@ final class TokenManager extends Component
         $this->validate(['name' => ['required', 'string', 'max:255']]);
 
         try {
-            $this->plainTextToken = $this->tokens->mint($this->request, $this->name, $this->abilities, $this->days, $this->typedNetworks())->plainTextToken;
+            $minted = $this->tokenable instanceof Model
+                ? $this->tokens->mintFor($this->request, $this->tokenable, $this->name, $this->abilities, $this->days, $this->typedNetworks())
+                : $this->tokens->mint($this->request, $this->name, $this->abilities, $this->days, $this->typedNetworks());
+            $this->plainTextToken = $minted->plainTextToken;
         } catch (AbilityRefused|MintRefused $refusal) {
             $this->status = $this->line('refused.'.$refusal->reason);
 
@@ -84,7 +104,21 @@ final class TokenManager extends Component
     public function revoke(string $tokenId): void
     {
         $this->plainTextToken = null;
-        $this->status = $this->line($this->tokens->revoke($this->request, $tokenId) ? 'revoked' : 'not_revoked');
+        $this->status = $this->line($this->tokens->revoke($this->request, $tokenId, $this->tokenable) ? 'revoked' : 'not_revoked');
+    }
+
+    /** Confirm the signed-in user's password on the screen, under the throttle of PersonalTokens. */
+    public function confirmPassword(): void
+    {
+        $password = $this->password;
+        $this->password = '';
+        $this->plainTextToken = null;
+
+        try {
+            $this->status = $this->line($this->tokens->confirmPassword($this->request, $password) ? 'confirmed' : 'not_confirmed');
+        } catch (MintRefused) {
+            $this->status = $this->line('confirm_too_fast');
+        }
     }
 
     public function render(): View
@@ -92,7 +126,8 @@ final class TokenManager extends Component
         $container = Container::getInstance();
         $catalog = $container->make(AbilityCatalog::class);
         $config = $container->make(Repository::class);
-        $owned = $this->tokens->listFor($this->request);
+        $owned = $this->tokens->listFor($this->request, $this->tokenable);
+        $endpoint = $config->get('sanctum-hardening.ui.endpoint');
 
         $variant = $config->get('sanctum-hardening.ui.variant');
         $wireKit = $variant === 'wirekit' || ($variant !== 'plain' && class_exists(WireKitServiceProvider::class));
@@ -101,6 +136,8 @@ final class TokenManager extends Component
             // The views translate through the contract rather than __() and trans_choice(), which
             // laravel/framework defines and this package does not require.
             'lang' => $this->translator,
+            'holder' => $this->holdsAnother(),
+            'asksForPassword' => ! $this->tokens->passwordConfirmed($this->request),
             'tokens' => $owned,
             'prefixes' => $container->make(TokenPrefixes::class)->of($owned),
             'limits' => $container->make(TokenNetworks::class)->ofEach($owned),
@@ -110,7 +147,10 @@ final class TokenManager extends Component
             'defaultLifetime' => $this->tokens->defaultLifetime(),
             'allowsNoExpiry' => $config->get('sanctum-hardening.minting.allow_no_expiry') === true,
             // The quickstart: the address and the limits as the application has them, never written out in a view.
-            'endpoint' => $container->make(UrlGenerator::class)->to(is_string($prefix = $config->get('sanctum-hardening.routes.prefix')) ? $prefix : 'api'),
+            // `ui.endpoint` names an API that answers on a host of its own; without it, the prefix on this host.
+            'endpoint' => is_string($endpoint) && trim($endpoint) !== ''
+                ? $endpoint
+                : $container->make(UrlGenerator::class)->to(is_string($prefix = $config->get('sanctum-hardening.routes.prefix')) ? $prefix : 'api'),
             'perToken' => $config->get('sanctum-hardening.throttle.per_token'),
             'perUser' => $config->get('sanctum-hardening.throttle.per_user'),
         ]);
@@ -161,10 +201,33 @@ final class TokenManager extends Component
         return array_values(array_filter(preg_split('/[\s,]+/', $this->networks) ?: [], static fn (string $entry): bool => $entry !== ''));
     }
 
+    /**
+     * Whether the screen manages the tokens of a holder other than the signed-in user, the case its texts
+     * speak of the holder in rather than of the account.
+     */
+    private function holdsAnother(): bool
+    {
+        if (! $this->tokenable instanceof Model) {
+            return false;
+        }
+
+        $user = $this->request->user();
+
+        return ! ($user instanceof Model && $user->getMorphClass() === $this->tokenable->getMorphClass() && $user->is($this->tokenable));
+    }
+
+    /** The line of `$key` under `screen`, in the holder's wording where the screen manages another holder and has one. */
     private function line(string $key): string
     {
-        $line = $this->translator->get('sanctum-hardening::messages.screen.'.$key);
+        foreach ($this->holdsAnother() ? ['holder.'.$key, $key] : [$key] as $candidate) {
+            $name = 'sanctum-hardening::messages.screen.'.$candidate;
+            $line = $this->translator->get($name);
 
-        return is_string($line) ? $line : $key;
+            if (is_string($line) && $line !== $name) {
+                return $line;
+            }
+        }
+
+        return $key;
     }
 }

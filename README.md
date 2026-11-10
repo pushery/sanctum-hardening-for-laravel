@@ -88,9 +88,11 @@ know, and a reserved ability belongs to the application's own code. `php artisan
 sanctum-hardening:doctor` names the tokens minted outside the package that carry either. See
 [Abilities](https://docs.pushery.com/sanctum-hardening-for-laravel/abilities). Schedule
 `sanctum-hardening:prune-prefixes` beside `sanctum:prune-expired`, which deletes tokens without the
-model events the package listens to, and `sanctum-hardening:prune-revocations`: a revoked token keeps
-its row, expired, with a record of who revoked it and when, until `revocations.keep_days` days have
-passed.
+model events the package listens to, and `sanctum-hardening:prune-revocations`, which deletes the
+record of who revoked a token and when once `revocations.keep_days` days have passed. A revoked token
+is expired from that moment, so `sanctum:prune-expired --hours=24` deletes its row after a day; run it
+with `--hours` at `revocations.keep_days` times 24 to keep the row as long as its record, and every
+expired token stays that long.
 
 ### Minting with limits
 
@@ -130,9 +132,11 @@ recorded with its route, method and status, never the values it carried, and
 <livewire:sanctum-hardening.tokens />
 ```
 
-With Livewire installed, a page behind `auth` and `password.confirm` embeds the self-service screen:
-a person mints a token with the abilities of the catalog, sees its plain text once, and revokes their
-tokens. See [The screen](https://docs.pushery.com/sanctum-hardening-for-laravel/screen).
+With Livewire installed, a page behind `auth` embeds the self-service screen: a person mints a token
+with the abilities of the catalog, sees its plain text once, and revokes their tokens, or those of a
+workspace the Gate lets them manage (`:tokenable="$workspace"`). Where the password was not confirmed
+a moment ago, the screen asks for it itself. See
+[The screen](https://docs.pushery.com/sanctum-hardening-for-laravel/screen).
 
 ## Testing
 

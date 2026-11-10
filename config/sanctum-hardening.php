@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Pushery\SanctumHardening\Support\EnvSwitch;
+
 return [
 
     /*
@@ -21,13 +23,10 @@ return [
     | switch is read typed, never cast: env() turns only `true`, `false`, `(true)`, `(false)`,
     | `empty` and `null` into values, and a cast to bool makes `no`, `off` and ` false` true.
     | So the spellings that switch it off are named, trimmed and in any case, and anything
-    | else keeps the value shipped here.
+    | else keeps the value shipped here. An empty line, as copying a template of a .env
+    | leaves one, keeps it too, as a missing line does.
     */
-    'enabled' => ! in_array(
-        is_string($enabled = env('SANCTUM_HARDENING_ENABLED')) ? strtolower(trim($enabled)) : $enabled,
-        [false, '', '0', 'false', 'no', 'off'],
-        true,
-    ),
+    'enabled' => EnvSwitch::read(env('SANCTUM_HARDENING_ENABLED'), true),
 
     /*
     |--------------------------------------------------------------------------
@@ -79,11 +78,7 @@ return [
             ? (int) $maxLifetime
             : 365,
         // Loosens a mint, so only an explicit yes turns it on, and a typo keeps it off.
-        'allow_no_expiry' => in_array(
-            is_string($noExpiry = env('SANCTUM_HARDENING_ALLOW_NO_EXPIRY')) ? strtolower(trim($noExpiry)) : $noExpiry,
-            [true, '1', 'true', 'yes', 'on'],
-            true,
-        ),
+        'allow_no_expiry' => EnvSwitch::read(env('SANCTUM_HARDENING_ALLOW_NO_EXPIRY'), false),
         // Zero asks for the password before every mint.
         'password_timeout' => is_numeric($passwordTimeout = env('SANCTUM_HARDENING_PASSWORD_TIMEOUT')) && (int) $passwordTimeout >= 0
             ? (int) $passwordTimeout
@@ -168,9 +163,14 @@ return [
     |--------------------------------------------------------------------------
     | The view set of the self-service screen, <livewire:sanctum-hardening.tokens />:
     | `wirekit`, `plain`, or `auto` for WireKit where pushery/wirekit is installed.
+    |
+    | `endpoint` is the address the screen's quickstart sends a request to. Null names the
+    | routes' prefix on the host of the page; an API that answers on a host of its own, such
+    | as https://api.example.com/api, is named here.
     */
     'ui' => [
         'variant' => 'auto',
+        'endpoint' => null,
     ],
 
     /*

@@ -8,6 +8,7 @@ use DateTimeInterface;
 use Illuminate\Cache\RateLimiter;
 use Illuminate\Contracts\Auth\Access\Gate;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Hashing\Hasher;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -30,6 +31,10 @@ use Pushery\SanctumHardening\Abilities\AbilityRefused;
  * revoked under the same rules, counted for that tokenable, and only where the application's Gate
  * lets the signed-in user manage its tokens.
  *
+ * The confirmation a mint asks for is the one Laravel's `password.confirm` records in the session.
+ * confirmPassword() records it as well, after checking the password, so a screen on a host without
+ * that route, the console of a workspace on its own subdomain for instance, can ask for it itself.
+ *
  * The application's own code mints through mintForSystem(): a reserved ability is allowed there, and
  * no limit of the self-service applies. A token that carries a reserved ability stays out of the
  * self-service's list and cannot be revoked there.
@@ -45,6 +50,9 @@ final readonly class PersonalTokens
     /** The longest name a token may have, the length the self-service screen allows. */
     public const int LONGEST_NAME = 255;
 
+    /** The wrong passwords a user may type into confirmPassword() a minute, from one address. */
+    public const int CONFIRM_ATTEMPTS = 5;
+
     public function __construct(
         private AbilityCatalog $catalog,
         private Repository $config,
@@ -54,6 +62,7 @@ final readonly class PersonalTokens
         private TokenPrefixes $prefixes,
         private TokenRevocations $revocations,
         private TokenNetworks $networks,
+        private Hasher $hasher,
     ) {}
 
     /**
@@ -269,12 +278,47 @@ final readonly class PersonalTokens
      * Whether the session confirmed the password within the timeout, the way Laravel's
      * `password.confirm` middleware records it.
      */
-    private function passwordConfirmed(Request $request): bool
+    public function passwordConfirmed(Request $request): bool
     {
         $timeout = $this->config->get('sanctum-hardening.minting.password_timeout') ?? $this->config->get('auth.password_timeout', 10_800);
         $confirmedAt = $request->hasSession() ? $request->session()->get('auth.password_confirmed_at') : null;
 
         return is_numeric($confirmedAt) && is_numeric($timeout) && Date::now()->getTimestamp() - (int) $confirmedAt <= (int) $timeout;
+    }
+
+    /**
+     * Check the password of the signed-in user of the request against the one the user's model holds,
+     * as the Eloquent user provider checks it, and record the confirmation in the request's session the
+     * way `password.confirm` does; whether it was the password. A request without a signed-in user or
+     * without a session confirms nothing. CONFIRM_ATTEMPTS wrong passwords a minute for the user and
+     * the address, and the next attempt is refused before the password is read.
+     *
+     * @throws MintRefused too_fast once the attempts of the minute are used up
+     */
+    public function confirmPassword(Request $request, string $password): bool
+    {
+        $user = $request->user();
+
+        if (! $user instanceof Model || ! $request->hasSession()) {
+            return false;
+        }
+
+        $attempts = 'sanctum-hardening:confirm:'.$user->getMorphClass().':'.TokenPrefixes::key($user->getKey()).'|'.$request->ip();
+
+        if ($this->limiter->tooManyAttempts($attempts, self::CONFIRM_ATTEMPTS)) {
+            throw MintRefused::tooFast($this->limiter->availableIn($attempts));
+        }
+
+        if (! $this->hasher->check($password, $user->getAuthPassword())) {
+            $this->limiter->hit($attempts, 60);
+
+            return false;
+        }
+
+        $this->limiter->clear($attempts);
+        $request->session()->put('auth.password_confirmed_at', Date::now()->getTimestamp());
+
+        return true;
     }
 
     /** The expiry of a token of `$days` days: null for none where that is allowed. */

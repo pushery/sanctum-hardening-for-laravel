@@ -4,6 +4,26 @@ All notable changes to `pushery/sanctum-hardening-for-laravel` are documented he
 
 A release carries only the sections that have an entry, in this order: `### ⚠️ Breaking`, `### ✨ Added`, `### 🔧 Changed`, `### ⚡ Performance`, `### 🐛 Fixed`, `### 🔒 Security`, `### 🧹 Deprecated`, `### 🗑️ Removed` and `### 📚 Documentation`.
 
+## [0.3.0] - 2026-11-10
+
+### ✨ Added
+
+- **The screen manages the tokens of another holder.** `<livewire:sanctum-hardening.tokens :tokenable="$workspace" />` mints, lists and revokes the tokens of the model it is given, a workspace for instance, where the application's Gate lets the signed-in user, through `mintFor()`, `listFor()` and `revoke()`. The holder stays the one the page passed, and a request cannot point the screen at another. Its texts then speak of the holder rather than of the account, from the new lines under `screen.holder` an application can publish and word for its own holder.
+- **The screen asks for the password itself where it was not confirmed a moment ago.** It shows a password field above the form, checks the password against the one the user's model holds, records the confirmation in the session of the page's host, and allows five wrong passwords a minute for the user and the address. A page on a host without `password.confirm`, the console of a workspace on its own subdomain for instance, no longer runs into a loop. `PersonalTokens::confirmPassword()` does the same for an application's own screen, and `PersonalTokens::passwordConfirmed()` says whether a request carries a fresh confirmation.
+- **`ui.endpoint` names the address of the quickstart.** An API that answers on a host of its own, such as `https://api.example.com/api`, is named there, and the quickstart no longer shows an address on the page's host where the API does not answer. Left null, the quickstart names the routes' prefix on that host, as before.
+
+### 🔧 Changed
+
+- **The two switches read their rule from the package, so a fix to it reaches a published config.** `config/sanctum-hardening.php` spelled out how a value of the `.env` turns them on or off, and a host that published the file kept that rule as it was on the day it published it, so a later fix to the rule, such as the one for an empty `.env` line, never reached the copy. The config calls `EnvSwitch::read()` now, and the rule ships in `src/Support/EnvSwitch.php`: `false`, `0`, `no` and `off` switch off, `true`, `1`, `yes` and `on` switch on, trimmed and in any case, and anything else keeps the value the package ships. **Upgrade:** in a published copy, replace the expression of each once with its call and import the class: `enabled` with `EnvSwitch::read(env('SANCTUM_HARDENING_ENABLED'), true)` and `minting.allow_no_expiry` with `EnvSwitch::read(env('SANCTUM_HARDENING_ALLOW_NO_EXPIRY'), false)`, and `use Pushery\SanctumHardening\Support\EnvSwitch;` at the top.
+
+### 🐛 Fixed
+
+- **An empty `SANCTUM_HARDENING_ENABLED=` keeps the API on.** `env()` reads the line as an empty string, and the switch counted it as off, so a line left empty by copying a template of the `.env` removed the routes of the API while a missing line kept them. Only `false`, `0`, `no` and `off` switch it off now.
+
+### 📚 Documentation
+
+- **The docs say when the row of a revoked token goes.** The README and the page on minting said a revoked token keeps its row until `revocations.keep_days` has passed, while `sanctum:prune-expired --hours=24`, the schedule the docs show, deletes it after a day, because a revoked token is expired from the moment it is revoked. Both say so now, as the start page did, and name the setting that keeps the row as long as the record of the revocation: `--hours` at `revocations.keep_days` times 24, which keeps every expired token that long.
+
 ## [0.2.0] - 2026-11-09
 
 ### ⚠️ Breaking
@@ -49,6 +69,7 @@ A release carries only the sections that have an entry, in this order: `### ⚠�
 - **The prefixes of deleted tokens are pruned.** `sanctum-hardening:prune-prefixes` forgets the prefix of every token that no longer exists, the ones a query deleted included, as `sanctum:prune-expired` deletes them. Schedule it beside Sanctum's prune.
 - **The last use of a token written once a minute.** Sanctum's write of `last_used_at` on every request goes through once every `last_used_at.every` seconds.
 
-[Unreleased]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/pushery/sanctum-hardening-for-laravel/releases/tag/v0.1.0

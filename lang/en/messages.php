@@ -40,6 +40,24 @@ return [
         'quickstart' => 'Quickstart',
         'quickstart_endpoint' => 'Send a request with the token to',
         'quickstart_limits' => 'Each token makes up to :token requests a minute, and an account up to :user over all of its tokens.',
+        // Asking for the password on the screen itself, where it was not confirmed a moment ago.
+        'confirm_intro' => 'Confirm your password before you create a token.',
+        'password' => 'Password',
+        'confirm' => 'Confirm password',
+        'confirmed' => 'Your password is confirmed.',
+        'not_confirmed' => 'That is not your password.',
+        'confirm_too_fast' => 'Too many wrong passwords. Try again in a minute.',
+        // The lines that speak of the account, for a screen that manages the tokens of another holder,
+        // a workspace for instance. An application names its holder by publishing these lines.
+        'holder' => [
+            'intro' => 'A token can do what its abilities name and never more than the holder it belongs to.',
+            'none' => 'No tokens yet.',
+            'quickstart_limits' => 'Each token makes up to :token requests a minute, and the tokens of this holder up to :user together.',
+            'refused' => [
+                'not_tokenable' => 'Tokens cannot be created for this holder.',
+                'limit_reached' => 'This holder has as many tokens as allowed. Revoke one first.',
+            ],
+        ],
         // Why a token was not minted, by the reason of the refusal.
         'refused' => [
             'none' => 'Choose at least one ability.',
@@ -48,6 +66,7 @@ return [
             'reserved' => 'One of the abilities is not offered here.',
             'malformed' => 'One of the abilities is not offered.',
             'not_tokenable' => 'Tokens cannot be created for this account.',
+            'not_allowed' => 'You may not manage the tokens of this holder.',
             'password_not_confirmed' => 'Confirm your password before you create a token.',
             'too_fast' => 'Tokens are being created too fast. Try again in a moment.',
             'limit_reached' => 'You hold as many tokens as allowed. Revoke one first.',
