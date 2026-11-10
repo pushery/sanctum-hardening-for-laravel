@@ -3,7 +3,7 @@
 <section aria-labelledby="sanctum-hardening-tokens-heading" data-sanctum-hardening-view="wirekit">
     <x-wirekit::stack>
         <x-wirekit::heading id="sanctum-hardening-tokens-heading" level="2">{{ $lang->get('sanctum-hardening::messages.screen.heading') }}</x-wirekit::heading>
-        <x-wirekit::text>{{ $lang->get('sanctum-hardening::messages.screen.intro') }}</x-wirekit::text>
+        <x-wirekit::text>{{ $holder ? $lang->get('sanctum-hardening::messages.screen.holder.intro') : $lang->get('sanctum-hardening::messages.screen.intro') }}</x-wirekit::text>
 
         <p role="status" aria-live="polite" id="sanctum-hardening-tokens-status">{{ $status }}</p>
 
@@ -12,6 +12,16 @@
                 <x-wirekit::text>{{ $lang->get('sanctum-hardening::messages.screen.copy_now') }}</x-wirekit::text>
                 <x-wirekit::code>{{ $plainTextToken }}</x-wirekit::code>
             </div>
+        @endif
+
+        @if ($asksForPassword)
+            <form wire:submit="confirmPassword" novalidate>
+                <x-wirekit::stack>
+                    <x-wirekit::text>{{ $lang->get('sanctum-hardening::messages.screen.confirm_intro') }}</x-wirekit::text>
+                    <x-wirekit::input type="password" wire:model="password" name="password" autocomplete="current-password" required :label="$lang->get('sanctum-hardening::messages.screen.password')" />
+                    <x-wirekit::button type="submit">{{ $lang->get('sanctum-hardening::messages.screen.confirm') }}</x-wirekit::button>
+                </x-wirekit::stack>
+            </form>
         @endif
 
         <form wire:submit="mint" novalidate>
@@ -77,7 +87,7 @@
                     </x-wirekit::table.row>
                 @empty
                     <x-wirekit::table.row>
-                        <x-wirekit::table.td colspan="6">{{ $lang->get('sanctum-hardening::messages.screen.none') }}</x-wirekit::table.td>
+                        <x-wirekit::table.td colspan="6">{{ $holder ? $lang->get('sanctum-hardening::messages.screen.holder.none') : $lang->get('sanctum-hardening::messages.screen.none') }}</x-wirekit::table.td>
                     </x-wirekit::table.row>
                 @endforelse
             </x-wirekit::table.body>
@@ -85,7 +95,7 @@
         <aside aria-labelledby="sanctum-hardening-quickstart-heading" id="sanctum-hardening-quickstart">
             <x-wirekit::heading id="sanctum-hardening-quickstart-heading" level="3">{{ $lang->get('sanctum-hardening::messages.screen.quickstart') }}</x-wirekit::heading>
             <x-wirekit::text>{{ $lang->get('sanctum-hardening::messages.screen.quickstart_endpoint') }} <x-wirekit::code>{{ $endpoint }}</x-wirekit::code></x-wirekit::text>
-            <x-wirekit::text>{{ $lang->get('sanctum-hardening::messages.screen.quickstart_limits', ['token' => $perToken, 'user' => $perUser]) }}</x-wirekit::text>
+            <x-wirekit::text>{{ $holder ? $lang->get('sanctum-hardening::messages.screen.holder.quickstart_limits', ['token' => $perToken, 'user' => $perUser]) : $lang->get('sanctum-hardening::messages.screen.quickstart_limits', ['token' => $perToken, 'user' => $perUser]) }}</x-wirekit::text>
             <x-wirekit::code-block language="bash">curl -H "Authorization: Bearer &lt;token&gt;" {{ $endpoint }}</x-wirekit::code-block>
         </aside>
     </x-wirekit::stack>

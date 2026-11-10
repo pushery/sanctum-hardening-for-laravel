@@ -40,6 +40,24 @@ return [
         'quickstart' => 'Avvio rapido',
         'quickstart_endpoint' => 'Invia una richiesta con il token a',
         'quickstart_limits' => 'Ogni token fa fino a :token richieste al minuto, e un account fino a :user con tutti i suoi token.',
+        // Asking for the password on the screen itself, where it was not confirmed a moment ago.
+        'confirm_intro' => 'Conferma la password prima di creare un token.',
+        'password' => 'Password',
+        'confirm' => 'Conferma password',
+        'confirmed' => 'La tua password è confermata.',
+        'not_confirmed' => 'Questa non è la tua password.',
+        'confirm_too_fast' => 'Troppe password sbagliate. Riprova tra un minuto.',
+        // The lines that speak of the account, for a screen that manages the tokens of another holder,
+        // a workspace for instance. An application names its holder by publishing these lines.
+        'holder' => [
+            'intro' => 'Un token può ciò che nominano le sue capacità e mai più del titolare a cui appartiene.',
+            'none' => 'Ancora nessun token.',
+            'quickstart_limits' => 'Ogni token fa fino a :token richieste al minuto, e i token di questo titolare fino a :user insieme.',
+            'refused' => [
+                'not_tokenable' => 'Per questo titolare non si possono creare token.',
+                'limit_reached' => 'Questo titolare ha tutti i token consentiti. Revocane prima uno.',
+            ],
+        ],
         // Why a token was not minted, by the reason of the refusal.
         'refused' => [
             'none' => 'Scegli almeno una capacità.',
@@ -48,6 +66,7 @@ return [
             'reserved' => 'Una delle capacità non è offerta qui.',
             'malformed' => 'Una delle capacità non è offerta.',
             'not_tokenable' => 'Per questo account non si possono creare token.',
+            'not_allowed' => 'Non puoi gestire i token di questo titolare.',
             'password_not_confirmed' => 'Conferma la password prima di creare un token.',
             'too_fast' => 'I token vengono creati troppo in fretta. Riprova tra un momento.',
             'limit_reached' => 'Hai tutti i token consentiti. Revocane prima uno.',

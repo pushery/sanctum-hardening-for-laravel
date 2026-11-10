@@ -40,6 +40,24 @@ return [
         'quickstart' => 'Démarrage rapide',
         'quickstart_endpoint' => 'Envoie une requête avec le jeton à',
         'quickstart_limits' => 'Chaque jeton fait jusqu’à :token requêtes par minute, et un compte jusqu’à :user avec tous ses jetons.',
+        // Asking for the password on the screen itself, where it was not confirmed a moment ago.
+        'confirm_intro' => 'Confirme ton mot de passe avant de créer un jeton.',
+        'password' => 'Mot de passe',
+        'confirm' => 'Confirmer le mot de passe',
+        'confirmed' => 'Ton mot de passe est confirmé.',
+        'not_confirmed' => 'Ce n’est pas ton mot de passe.',
+        'confirm_too_fast' => 'Trop de mots de passe erronés. Réessaie dans une minute.',
+        // The lines that speak of the account, for a screen that manages the tokens of another holder,
+        // a workspace for instance. An application names its holder by publishing these lines.
+        'holder' => [
+            'intro' => 'Un jeton peut ce que nomment ses capacités, et jamais plus que le titulaire auquel il appartient.',
+            'none' => 'Aucun jeton pour l’instant.',
+            'quickstart_limits' => 'Chaque jeton fait jusqu’à :token requêtes par minute, et les jetons de ce titulaire jusqu’à :user ensemble.',
+            'refused' => [
+                'not_tokenable' => 'Aucun jeton ne peut être créé pour ce titulaire.',
+                'limit_reached' => 'Ce titulaire a autant de jetons que permis. Révoques-en un d’abord.',
+            ],
+        ],
         // Why a token was not minted, by the reason of the refusal.
         'refused' => [
             'none' => 'Choisis au moins une capacité.',
@@ -48,6 +66,7 @@ return [
             'reserved' => 'Une des capacités n’est pas proposée ici.',
             'malformed' => 'Une des capacités n’est pas proposée.',
             'not_tokenable' => 'Aucun jeton ne peut être créé pour ce compte.',
+            'not_allowed' => 'Tu ne peux pas gérer les jetons de ce titulaire.',
             'password_not_confirmed' => 'Confirme ton mot de passe avant de créer un jeton.',
             'too_fast' => 'Les jetons sont créés trop vite. Réessaie dans un instant.',
             'limit_reached' => 'Tu as autant de jetons que permis. Révoques-en un d’abord.',

@@ -40,6 +40,24 @@ return [
         'quickstart' => 'Início rápido',
         'quickstart_endpoint' => 'Envia um pedido com o token para',
         'quickstart_limits' => 'Cada token faz até :token pedidos por minuto, e uma conta até :user com todos os seus tokens.',
+        // Asking for the password on the screen itself, where it was not confirmed a moment ago.
+        'confirm_intro' => 'Confirma a tua palavra-passe antes de criar um token.',
+        'password' => 'Palavra-passe',
+        'confirm' => 'Confirmar palavra-passe',
+        'confirmed' => 'A tua palavra-passe está confirmada.',
+        'not_confirmed' => 'Essa não é a tua palavra-passe.',
+        'confirm_too_fast' => 'Demasiadas palavras-passe erradas. Tenta de novo daqui a um minuto.',
+        // The lines that speak of the account, for a screen that manages the tokens of another holder,
+        // a workspace for instance. An application names its holder by publishing these lines.
+        'holder' => [
+            'intro' => 'Um token pode o que as suas capacidades nomeiam e nunca mais do que o titular a quem pertence.',
+            'none' => 'Ainda não há tokens.',
+            'quickstart_limits' => 'Cada token faz até :token pedidos por minuto, e os tokens deste titular até :user em conjunto.',
+            'refused' => [
+                'not_tokenable' => 'Não é possível criar tokens para este titular.',
+                'limit_reached' => 'Este titular tem tantos tokens quantos os permitidos. Revoga um primeiro.',
+            ],
+        ],
         // Why a token was not minted, by the reason of the refusal.
         'refused' => [
             'none' => 'Escolhe pelo menos uma capacidade.',
@@ -48,6 +66,7 @@ return [
             'reserved' => 'Uma das capacidades não é oferecida aqui.',
             'malformed' => 'Uma das capacidades não é oferecida.',
             'not_tokenable' => 'Não é possível criar tokens para esta conta.',
+            'not_allowed' => 'Não podes gerir os tokens deste titular.',
             'password_not_confirmed' => 'Confirma a tua palavra-passe antes de criar um token.',
             'too_fast' => 'Os tokens estão a ser criados depressa demais. Tenta de novo daqui a pouco.',
             'limit_reached' => 'Tens tantos tokens quantos os permitidos. Revoga um primeiro.',

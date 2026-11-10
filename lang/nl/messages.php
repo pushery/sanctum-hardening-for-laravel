@@ -40,6 +40,24 @@ return [
         'quickstart' => 'Snelstart',
         'quickstart_endpoint' => 'Stuur een verzoek met het token naar',
         'quickstart_limits' => 'Elk token doet tot :token verzoeken per minuut, en een account tot :user over al zijn tokens.',
+        // Asking for the password on the screen itself, where it was not confirmed a moment ago.
+        'confirm_intro' => 'Bevestig je wachtwoord voordat je een token aanmaakt.',
+        'password' => 'Wachtwoord',
+        'confirm' => 'Wachtwoord bevestigen',
+        'confirmed' => 'Je wachtwoord is bevestigd.',
+        'not_confirmed' => 'Dat is niet je wachtwoord.',
+        'confirm_too_fast' => 'Te veel verkeerde wachtwoorden. Probeer het over een minuut opnieuw.',
+        // The lines that speak of the account, for a screen that manages the tokens of another holder,
+        // a workspace for instance. An application names its holder by publishing these lines.
+        'holder' => [
+            'intro' => 'Een token kan wat zijn bevoegdheden noemen, en nooit meer dan de houder waartoe het behoort.',
+            'none' => 'Nog geen tokens.',
+            'quickstart_limits' => 'Elk token doet tot :token verzoeken per minuut, en de tokens van deze houder samen tot :user.',
+            'refused' => [
+                'not_tokenable' => 'Voor deze houder kunnen geen tokens worden aangemaakt.',
+                'limit_reached' => 'Deze houder heeft zoveel tokens als toegestaan. Trek er eerst een in.',
+            ],
+        ],
         // Why a token was not minted, by the reason of the refusal.
         'refused' => [
             'none' => 'Kies minstens één bevoegdheid.',
@@ -48,6 +66,7 @@ return [
             'reserved' => 'Een van de bevoegdheden wordt hier niet aangeboden.',
             'malformed' => 'Een van de bevoegdheden wordt niet aangeboden.',
             'not_tokenable' => 'Voor dit account kunnen geen tokens worden aangemaakt.',
+            'not_allowed' => 'Je mag de tokens van deze houder niet beheren.',
             'password_not_confirmed' => 'Bevestig je wachtwoord voordat je een token aanmaakt.',
             'too_fast' => 'Er worden te snel tokens aangemaakt. Probeer het zo opnieuw.',
             'limit_reached' => 'Je hebt zoveel tokens als toegestaan. Trek er eerst een in.',

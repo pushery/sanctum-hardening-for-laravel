@@ -2,7 +2,7 @@
      the screen offers only the abilities and lifetimes a mint accepts, and never a reserved ability. --}}
 <section aria-labelledby="sanctum-hardening-tokens-heading" class="sanctum-hardening-tokens" data-sanctum-hardening-view="plain">
     <h2 id="sanctum-hardening-tokens-heading">{{ $lang->get('sanctum-hardening::messages.screen.heading') }}</h2>
-    <p>{{ $lang->get('sanctum-hardening::messages.screen.intro') }}</p>
+    <p>{{ $holder ? $lang->get('sanctum-hardening::messages.screen.holder.intro') : $lang->get('sanctum-hardening::messages.screen.intro') }}</p>
 
     <p role="status" aria-live="polite" id="sanctum-hardening-tokens-status">{{ $status }}</p>
 
@@ -11,6 +11,17 @@
             <p>{{ $lang->get('sanctum-hardening::messages.screen.copy_now') }}</p>
             <code>{{ $plainTextToken }}</code>
         </div>
+    @endif
+
+    @if ($asksForPassword)
+        <form wire:submit="confirmPassword" novalidate>
+            <p>{{ $lang->get('sanctum-hardening::messages.screen.confirm_intro') }}</p>
+            <div>
+                <label for="sanctum-hardening-password">{{ $lang->get('sanctum-hardening::messages.screen.password') }}</label>
+                <input id="sanctum-hardening-password" type="password" wire:model="password" name="password" autocomplete="current-password" required>
+            </div>
+            <button type="submit">{{ $lang->get('sanctum-hardening::messages.screen.confirm') }}</button>
+        </form>
     @endif
 
     <form wire:submit="mint" novalidate>
@@ -96,7 +107,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="6">{{ $lang->get('sanctum-hardening::messages.screen.none') }}</td>
+                    <td colspan="6">{{ $holder ? $lang->get('sanctum-hardening::messages.screen.holder.none') : $lang->get('sanctum-hardening::messages.screen.none') }}</td>
                 </tr>
             @endforelse
         </tbody>
@@ -104,7 +115,7 @@
     <aside aria-labelledby="sanctum-hardening-quickstart-heading" id="sanctum-hardening-quickstart">
         <h3 id="sanctum-hardening-quickstart-heading">{{ $lang->get('sanctum-hardening::messages.screen.quickstart') }}</h3>
         <p>{{ $lang->get('sanctum-hardening::messages.screen.quickstart_endpoint') }} <code>{{ $endpoint }}</code></p>
-        <p>{{ $lang->get('sanctum-hardening::messages.screen.quickstart_limits', ['token' => $perToken, 'user' => $perUser]) }}</p>
+        <p>{{ $holder ? $lang->get('sanctum-hardening::messages.screen.holder.quickstart_limits', ['token' => $perToken, 'user' => $perUser]) : $lang->get('sanctum-hardening::messages.screen.quickstart_limits', ['token' => $perToken, 'user' => $perUser]) }}</p>
         <pre><code>curl -H "Authorization: Bearer &lt;token&gt;" {{ $endpoint }}</code></pre>
     </aside>
 </section>
