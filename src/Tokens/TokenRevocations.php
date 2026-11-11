@@ -93,8 +93,8 @@ final readonly class TokenRevocations
     }
 
     /**
-     * Delete the tokens revoked more than `$days` days ago, with their records and their prefixes, and
-     * say how many.
+     * Delete the tokens revoked more than `$days` days ago, with their records, their prefixes, their
+     * networks and their alerts, and say how many.
      *
      * The tokens are deleted by key through the token model rather than joined, because a record's key
      * is a string and a token's key is a number on most schemas.
@@ -113,6 +113,7 @@ final readonly class TokenRevocations
             $model->newQuery()->whereIn($model->getKeyName(), $keys)->delete();
             DB::table(TokenPrefixes::TABLE)->whereIn('token_id', $keys)->delete();
             DB::table(TokenNetworks::TABLE)->whereIn('token_id', $keys)->delete();
+            DB::table(TokenAlerts::TABLE)->whereIn('token_id', $keys)->delete();
             $pruned += DB::table(self::TABLE)->whereIn('token_id', $keys)->delete();
         }
 

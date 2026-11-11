@@ -75,4 +75,21 @@ return [
             'network' => 'L’une des adresses ou l’un des réseaux ne peut pas limiter un jeton.',
         ],
     ],
+    // The mails to the holder of a token before it expires and once it has gone unused.
+    'alerts' => [
+        'prefix' => 'Le jeton commence par :prefix.',
+        'revoke' => 'Si tu n’en as plus besoin, révoque-le sur la page de tes jetons d’API.',
+        'open' => 'Ouvrir tes jetons d’API',
+        'expiring' => [
+            'subject' => 'Ton jeton d’API « :name » expire le :date',
+            'line' => 'Ton jeton d’API « :name » expire le :date. Les requêtes qui l’utilisent cesseront alors de fonctionner : crée-en un nouveau avant si tu en as encore besoin.',
+        ],
+        'inactive' => [
+            'subject_used' => 'Ton jeton d’API « :name » n’a pas été utilisé depuis le :date',
+            'line_used' => 'Ton jeton d’API « :name » a été utilisé pour la dernière fois le :date.',
+            'subject_never' => 'Ton jeton d’API « :name » n’a jamais été utilisé',
+            'line_never' => 'Ton jeton d’API « :name » a été créé le :date et n’a jamais été utilisé.',
+            'risk' => 'Un jeton que personne n’utilise fonctionne toujours pour quiconque le détient.',
+        ],
+    ],
 ];

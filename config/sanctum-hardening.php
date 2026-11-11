@@ -159,6 +159,33 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Alerts
+    |--------------------------------------------------------------------------
+    | `sanctum-hardening:send-alerts` mails the holder of a token `expiring.days` days before it
+    | expires, and once no request has used it for `inactive.days` days, a token never used counted
+    | from its creation. Each mail goes out once for the same expiry and the same last use, and
+    | `enabled` switches either off. Every mail links to `link`: the route name or the address of
+    | the page that carries the screen, where the holder revokes the token. A token without such a
+    | page gets no mail, and the command fails until one is named. Schedule it daily.
+    */
+    'alerts' => [
+        'link' => null,
+        'expiring' => [
+            'enabled' => true,
+            'days' => is_numeric($expiringDays = env('SANCTUM_HARDENING_ALERT_EXPIRING_DAYS')) && (int) $expiringDays >= 1
+                ? (int) $expiringDays
+                : 7,
+        ],
+        'inactive' => [
+            'enabled' => true,
+            'days' => is_numeric($inactiveDays = env('SANCTUM_HARDENING_ALERT_INACTIVE_DAYS')) && (int) $inactiveDays >= 1
+                ? (int) $inactiveDays
+                : 90,
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Screen
     |--------------------------------------------------------------------------
     | The view set of the self-service screen, <livewire:sanctum-hardening.tokens />:

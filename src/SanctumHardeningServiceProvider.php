@@ -19,12 +19,16 @@ use Pushery\SanctumHardening\Console\DoctorCommand;
 use Pushery\SanctumHardening\Console\PrunePrefixesCommand;
 use Pushery\SanctumHardening\Console\PruneRevocationsCommand;
 use Pushery\SanctumHardening\Console\PruneUsesCommand;
+use Pushery\SanctumHardening\Console\SendAlertsCommand;
 use Pushery\SanctumHardening\Livewire\TokenManager;
 use Pushery\SanctumHardening\Support\LanguageFallbackLoader;
 use Pushery\SanctumHardening\Throttling\TokenThrottle;
+use Pushery\SanctumHardening\Tokens\AlertsToTheHolder;
 use Pushery\SanctumHardening\Tokens\LastUsedThrottle;
 use Pushery\SanctumHardening\Tokens\NoTokenLimit;
+use Pushery\SanctumHardening\Tokens\ResolvesTokenAlerts;
 use Pushery\SanctumHardening\Tokens\ResolvesTokenLimit;
+use Pushery\SanctumHardening\Tokens\TokenAlerts;
 use Pushery\SanctumHardening\Tokens\TokenNetworks;
 use Pushery\SanctumHardening\Tokens\TokenPrefixes;
 
@@ -54,6 +58,7 @@ final class SanctumHardeningServiceProvider extends ServiceProvider
         // minting checks against.
         $this->app->singleton(AbilityCatalog::class);
         $this->app->bindIf(ResolvesTokenLimit::class, NoTokenLimit::class);
+        $this->app->bindIf(ResolvesTokenAlerts::class, AlertsToTheHolder::class);
     }
 
     public function boot(): void
@@ -85,6 +90,7 @@ final class SanctumHardeningServiceProvider extends ServiceProvider
             Event::listen('eloquent.deleted: '.$model, function (Model $token): void {
                 $this->app->make(TokenPrefixes::class)->forget($token->getKey());
                 $this->app->make(TokenNetworks::class)->forget($token->getKey());
+                $this->app->make(TokenAlerts::class)->forget($token->getKey());
             });
 
             // After the application's own boot() as well, so a callback it gave Sanctum there keeps
@@ -93,7 +99,7 @@ final class SanctumHardeningServiceProvider extends ServiceProvider
         });
 
         if ($this->app->runningInConsole()) {
-            $this->commands([DoctorCommand::class, PrunePrefixesCommand::class, PruneRevocationsCommand::class, PruneUsesCommand::class]);
+            $this->commands([DoctorCommand::class, PrunePrefixesCommand::class, PruneRevocationsCommand::class, PruneUsesCommand::class, SendAlertsCommand::class]);
             $this->registerPublishing();
         }
     }
