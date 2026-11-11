@@ -66,6 +66,10 @@ the user who revoked it; revoke from the application's own code through
 `TokenRevocations::revoke($token, $by)`. Every request through `SanctumHardening::routes()` is
 recorded with its route, method and status, never the values it carried, and the screen lists the
 latest of each token; schedule `sanctum-hardening:prune-uses` daily to delete the older ones.
+Schedule `sanctum-hardening:send-alerts` daily and name the page that carries the screen in
+`sanctum-hardening.alerts.link`: it mails a token's holder before the token expires and once it has
+gone unused, each once. Bind a `ResolvesTokenAlerts` of the application's own where a token's holder
+is a workspace rather than a person.
 
 ## Examples
 

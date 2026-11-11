@@ -75,4 +75,21 @@ return [
             'network' => 'Una de las direcciones o redes no sirve para limitar un token.',
         ],
     ],
+    // The mails to the holder of a token before it expires and once it has gone unused.
+    'alerts' => [
+        'prefix' => 'El token empieza por :prefix.',
+        'revoke' => 'Si ya no lo necesitas, revócalo en la página de tus tokens de API.',
+        'open' => 'Abrir tus tokens de API',
+        'expiring' => [
+            'subject' => 'Tu token de API «:name» caduca el :date',
+            'line' => 'Tu token de API «:name» caduca el :date. Las solicitudes que lo usan dejarán de funcionar entonces, así que crea uno nuevo antes si aún lo necesitas.',
+        ],
+        'inactive' => [
+            'subject_used' => 'Tu token de API «:name» no se usa desde el :date',
+            'line_used' => 'Tu token de API «:name» se usó por última vez el :date.',
+            'subject_never' => 'Tu token de API «:name» nunca se ha usado',
+            'line_never' => 'Tu token de API «:name» se creó el :date y nunca se ha usado.',
+            'risk' => 'Un token que nadie usa sigue funcionando para quien lo tenga.',
+        ],
+    ],
 ];

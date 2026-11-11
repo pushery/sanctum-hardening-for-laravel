@@ -4,6 +4,14 @@ All notable changes to `pushery/sanctum-hardening-for-laravel` are documented he
 
 A release carries only the sections that have an entry, in this order: `### ⚠️ Breaking`, `### ✨ Added`, `### 🔧 Changed`, `### ⚡ Performance`, `### 🐛 Fixed`, `### 🔒 Security`, `### 🧹 Deprecated`, `### 🗑️ Removed` and `### 📚 Documentation`.
 
+## [0.4.0] - 2026-11-11
+
+### ✨ Added
+
+- **Mails before a token expires and after it has gone unused.** `sanctum-hardening:send-alerts` mails the holder of a token `alerts.expiring.days` days before it expires, 7 by default, and once no request has used it for `alerts.inactive.days` days, 90 by default, a token never used counted from its creation. Each mail names the token and the first characters of its secret, links to the page `alerts.link` names, where the holder revokes it, and goes out once for the same expiry and the same last use. `enabled` switches either mail off, and a token with a reserved ability gets none. An application whose tokens belong to a workspace binds its own `ResolvesTokenAlerts` to name the recipient and the page. `sanctum-hardening:prune-prefixes` forgets the alerts of deleted tokens as well.
+
+  **Upgrade:** run `php artisan migrate` for the table `sanctum_hardening_token_alerts`, which `2026_11_08_000003_create_sanctum_hardening_token_alerts_table` creates, name the page with the screen in `sanctum-hardening.alerts.link`, and schedule `sanctum-hardening:send-alerts` daily. The package now requires `illuminate/notifications`, which a Laravel application already has through `laravel/framework`.
+
 ## [0.3.0] - 2026-11-10
 
 ### ✨ Added
@@ -69,7 +77,8 @@ A release carries only the sections that have an entry, in this order: `### ⚠�
 - **The prefixes of deleted tokens are pruned.** `sanctum-hardening:prune-prefixes` forgets the prefix of every token that no longer exists, the ones a query deleted included, as `sanctum:prune-expired` deletes them. Schedule it beside Sanctum's prune.
 - **The last use of a token written once a minute.** Sanctum's write of `last_used_at` on every request goes through once every `last_used_at.every` seconds.
 
-[Unreleased]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/pushery/sanctum-hardening-for-laravel/releases/tag/v0.1.0

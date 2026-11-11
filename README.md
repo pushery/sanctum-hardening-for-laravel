@@ -138,6 +138,18 @@ workspace the Gate lets them manage (`:tokenable="$workspace"`). Where the passw
 a moment ago, the screen asks for it itself. See
 [The screen](https://docs.pushery.com/sanctum-hardening-for-laravel/screen).
 
+### Alerts
+
+```php
+use Illuminate\Support\Facades\Schedule;
+
+Schedule::command('sanctum-hardening:send-alerts')->daily();
+```
+
+The holder of a token gets a mail 7 days before it expires and once no request has used it for 90
+days, each sent once, with a link to the page `sanctum-hardening.alerts.link` names, where the token
+is revoked. See [Alerts](https://docs.pushery.com/sanctum-hardening-for-laravel/alerts).
+
 ## Testing
 
 The test suite is not part of the published package: the tests and their PHPUnit
