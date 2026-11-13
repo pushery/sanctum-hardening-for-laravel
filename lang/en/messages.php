@@ -31,11 +31,12 @@ return [
         'networks' => 'Networks',
         'networks_hint' => 'Optional. One address or network a line, such as 203.0.113.7 or 10.0.0.0/8. The token then works from these alone.',
         'only_from' => 'Only from :networks',
-        // How a date and a moment read on the screen, in the reader's language. German writes
-        // "Uhr" after a clock time.
+        // How a date and a moment read on the screen and in the mails, in the reader's language, the
+        // month as a word so that no reader takes the day for the month. German writes "Uhr" after a
+        // clock time.
         'formats' => [
-            'date' => 'L',
-            'moment' => 'L LT',
+            'date' => 'll',
+            'moment' => 'll LT',
         ],
         'quickstart' => 'Quickstart',
         'quickstart_endpoint' => 'Send a request with the token to',

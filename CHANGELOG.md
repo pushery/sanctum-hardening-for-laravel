@@ -4,6 +4,16 @@ All notable changes to `pushery/sanctum-hardening-for-laravel` are documented he
 
 A release carries only the sections that have an entry, in this order: `### ⚠️ Breaking`, `### ✨ Added`, `### 🔧 Changed`, `### ⚡ Performance`, `### 🐛 Fixed`, `### 🔒 Security`, `### 🧹 Deprecated`, `### 🗑️ Removed` and `### 📚 Documentation`.
 
+## [0.4.1] - 2026-11-13
+
+### 🐛 Fixed
+
+- **The token screen and its mails name the month of a date.** A token's expiry and last use, and the day an alert names, stood in digits, in English in the American order: "12/24/2026". They read "Dec 24, 2026" now, "24. Dez 2026" in German, in every language of the package. A host that published the translations sets `screen.formats.date` to `ll` and `screen.formats.moment` to `ll LT` itself.
+- **The token screen marks the optional field, not the required one.** "Name" carried an asterisk nothing on the screen explained, while "Networks" said "Optional." in its hint, and the password confirmation carried one on its only field. Both are said to be required with `aria-required` now and draw no asterisk; "Networks" keeps its word.
+- **The quickstart keeps its parts apart and ends both sentences.** Its heading, the two sentences and the example stood without space between them, and the first sentence ended at the address without a period. They stand in a stack with the screen's spacing now, and the address is followed by a period.
+- **The token list keeps a date and a moment on one line.** "Expires" and "Last used" could break between the day and the month, or the date and the time, in a narrow column of the WireKit screen. Each stands in an element that does not wrap now.
+- **"Create token" keeps its own width.** In the WireKit screen the button ran across the whole form, as wide as the name field, and so did "Confirm" when the screen asks for the password. Both stand at the start of their form at the width of their label now.
+
 ## [0.4.0] - 2026-11-11
 
 ### ✨ Added
@@ -77,7 +87,8 @@ A release carries only the sections that have an entry, in this order: `### ⚠�
 - **The prefixes of deleted tokens are pruned.** `sanctum-hardening:prune-prefixes` forgets the prefix of every token that no longer exists, the ones a query deleted included, as `sanctum:prune-expired` deletes them. Schedule it beside Sanctum's prune.
 - **The last use of a token written once a minute.** Sanctum's write of `last_used_at` on every request goes through once every `last_used_at.every` seconds.
 
-[Unreleased]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.1.0...v0.2.0

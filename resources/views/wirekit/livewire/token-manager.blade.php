@@ -18,15 +18,19 @@
             <form wire:submit="confirmPassword" novalidate>
                 <x-wirekit::stack>
                     <x-wirekit::text>{{ $lang->get('sanctum-hardening::messages.screen.confirm_intro') }}</x-wirekit::text>
-                    <x-wirekit::input type="password" wire:model="password" name="password" autocomplete="current-password" required :label="$lang->get('sanctum-hardening::messages.screen.password')" />
-                    <x-wirekit::button type="submit">{{ $lang->get('sanctum-hardening::messages.screen.confirm') }}</x-wirekit::button>
+                    {{-- Required and said so with aria-required: the form submits with novalidate, so `required` only drew
+                         WireKit's asterisk, which a form of one field does not need. --}}
+                    <x-wirekit::input type="password" wire:model="password" name="password" autocomplete="current-password" aria-required="true" :label="$lang->get('sanctum-hardening::messages.screen.password')" />
+                    <x-wirekit::button type="submit" class="self-start">{{ $lang->get('sanctum-hardening::messages.screen.confirm') }}</x-wirekit::button>
                 </x-wirekit::stack>
             </form>
         @endif
 
         <form wire:submit="mint" novalidate>
             <x-wirekit::stack>
-                <x-wirekit::input wire:model="name" name="name" maxlength="255" required :label="$lang->get('sanctum-hardening::messages.screen.name')" />
+                {{-- The form marks the field that is optional, Networks, and says the required one with aria-required
+                     rather than an asterisk nothing on the screen explains. --}}
+                <x-wirekit::input wire:model="name" name="name" maxlength="255" aria-required="true" :label="$lang->get('sanctum-hardening::messages.screen.name')" />
 
                 <x-wirekit::field.set :legend="$lang->get('sanctum-hardening::messages.screen.abilities')" name="abilities">
                     @foreach ($grantable as $ability => $label)
@@ -46,7 +50,9 @@
 
                 <x-wirekit::textarea wire:model="networks" name="networks" rows="3" :label="$lang->get('sanctum-hardening::messages.screen.networks')" :hint="$lang->get('sanctum-hardening::messages.screen.networks_hint')" />
 
-                <x-wirekit::button type="submit">{{ $lang->get('sanctum-hardening::messages.screen.mint') }}</x-wirekit::button>
+                {{-- At its own width: a stack stretches its children across, and a button as wide as the form
+                     reads as a bar rather than as the form's action. --}}
+                <x-wirekit::button type="submit" class="self-start">{{ $lang->get('sanctum-hardening::messages.screen.mint') }}</x-wirekit::button>
             </x-wirekit::stack>
         </form>
 
@@ -72,9 +78,10 @@
                                 <x-wirekit::text size="sm" intent="muted" leading="tight" break="anywhere">{{ $lang->get('sanctum-hardening::messages.screen.only_from', ['networks' => implode(', ', $limits[(string) $token->getKey()])]) }}</x-wirekit::text>
                             @endif
                         </x-wirekit::table.td>
-                        <x-wirekit::table.td>{{ $token->getAttribute('expires_at')?->locale($lang->getLocale())->isoFormat($lang->get('sanctum-hardening::messages.screen.formats.date')) ?? $lang->get('sanctum-hardening::messages.screen.never') }}</x-wirekit::table.td>
+                        {{-- A date or a moment on one line: broken over two it reads as two values. --}}
+                        <x-wirekit::table.td><span class="whitespace-nowrap">{{ $token->getAttribute('expires_at')?->locale($lang->getLocale())->isoFormat($lang->get('sanctum-hardening::messages.screen.formats.date')) ?? $lang->get('sanctum-hardening::messages.screen.never') }}</span></x-wirekit::table.td>
                         <x-wirekit::table.td>
-                            {{ $token->getAttribute('last_used_at')?->locale($lang->getLocale())->isoFormat($lang->get('sanctum-hardening::messages.screen.formats.moment')) ?? $lang->get('sanctum-hardening::messages.screen.never') }}
+                            <span class="whitespace-nowrap">{{ $token->getAttribute('last_used_at')?->locale($lang->getLocale())->isoFormat($lang->get('sanctum-hardening::messages.screen.formats.moment')) ?? $lang->get('sanctum-hardening::messages.screen.never') }}</span>
                             @if (($uses[(string) $token->getKey()] ?? []) !== [])
                                 <x-wirekit::list type="none" :items="$uses[(string) $token->getKey()]" :aria-label="$lang->get('sanctum-hardening::messages.screen.recent')" />
                             @endif
@@ -92,11 +99,12 @@
                 @endforelse
             </x-wirekit::table.body>
         </x-wirekit::table>
-        <aside aria-labelledby="sanctum-hardening-quickstart-heading" id="sanctum-hardening-quickstart">
+        {{-- A stack, so the heading, the two sentences and the example keep the screen's spacing apart. --}}
+        <x-wirekit::stack as="aside" gap="sm" aria-labelledby="sanctum-hardening-quickstart-heading" id="sanctum-hardening-quickstart">
             <x-wirekit::heading id="sanctum-hardening-quickstart-heading" level="3">{{ $lang->get('sanctum-hardening::messages.screen.quickstart') }}</x-wirekit::heading>
-            <x-wirekit::text>{{ $lang->get('sanctum-hardening::messages.screen.quickstart_endpoint') }} <x-wirekit::code>{{ $endpoint }}</x-wirekit::code></x-wirekit::text>
+            <x-wirekit::text>{{ $lang->get('sanctum-hardening::messages.screen.quickstart_endpoint') }} <x-wirekit::code>{{ $endpoint }}</x-wirekit::code>.</x-wirekit::text>
             <x-wirekit::text>{{ $holder ? $lang->get('sanctum-hardening::messages.screen.holder.quickstart_limits', ['token' => $perToken, 'user' => $perUser]) : $lang->get('sanctum-hardening::messages.screen.quickstart_limits', ['token' => $perToken, 'user' => $perUser]) }}</x-wirekit::text>
             <x-wirekit::code-block language="bash">curl -H "Authorization: Bearer &lt;token&gt;" {{ $endpoint }}</x-wirekit::code-block>
-        </aside>
+        </x-wirekit::stack>
     </x-wirekit::stack>
 </section>

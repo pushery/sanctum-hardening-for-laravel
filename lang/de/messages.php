@@ -34,8 +34,8 @@ return [
         // How a date and a moment read on the screen, in the reader's language. German writes
         // "Uhr" after a clock time.
         'formats' => [
-            'date' => 'L',
-            'moment' => 'L LT [Uhr]',
+            'date' => 'll',
+            'moment' => 'll LT [Uhr]',
         ],
         'quickstart' => 'Schnellstart',
         'quickstart_endpoint' => 'Sende eine Anfrage mit dem Token an',
