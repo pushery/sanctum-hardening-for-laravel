@@ -7,8 +7,10 @@ namespace Pushery\SanctumHardening\Console;
 use Illuminate\Console\Command;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 use Laravel\Sanctum\Sanctum;
 use Pushery\SanctumHardening\Abilities\AbilityCatalog;
 use Pushery\SanctumHardening\Support\TableLookup;
@@ -34,7 +36,9 @@ use Symfony\Component\Console\Attribute\AsCommand;
  * A prune that never runs, or fails every night, would otherwise keep those rows for good, and nothing
  * would say so. And it reports the alert after a silence where it is switched on while Sanctum writes no
  * last use, because sanctum-hardening:send-alerts then sends none. On PostgreSQL it warns where the
- * database session runs in another time zone than the application.
+ * database session runs in another time zone than the application. And it reports a guard Sanctum asks
+ * for a session user while no route signs a client in over the session, because a raw remember cookie
+ * then signs in to the API without the application key.
  */
 #[AsCommand(name: 'sanctum-hardening:doctor')]
 final class DoctorCommand extends Command
@@ -47,17 +51,72 @@ final class DoctorCommand extends Command
         {--scheduled-elsewhere=* : A daily command of the package that your server runs outside the scheduler, such as prune-uses}';
 
     /** @var string */
-    protected $description = 'Report the tokens that carry the wildcard or an ability the catalog does not know, limited tokens Sanctum no longer checks, and prunes that do not run';
+    protected $description = 'Report the tokens that carry the wildcard or an ability the catalog does not know, limited tokens Sanctum no longer checks, prunes that do not run, and a session guard no route needs';
 
-    public function handle(AbilityCatalog $catalog, Schedule $schedule, TokenAlerts $alerts, Repository $config): int
+    public function handle(AbilityCatalog $catalog, Schedule $schedule, TokenAlerts $alerts, Repository $config, Router $router): int
     {
         $tokens = $this->tokensAreSound($catalog);
         $scheduled = $this->dailyCommandsAreScheduled($schedule, $alerts);
         $pruned = $this->nothingOutlivesItsRetention($config);
         $silence = $this->silenceIsKnown($alerts);
+        $guards = $this->sessionGuardsAreNeeded($config, $router);
         $this->warnOfAnotherSessionZone();
 
-        return $tokens && $scheduled && $pruned && $silence ? self::SUCCESS : self::FAILURE;
+        return $tokens && $scheduled && $pruned && $silence && $guards ? self::SUCCESS : self::FAILURE;
+    }
+
+    /**
+     * Report the guards Sanctum asks for a session user while no route signs a client in over the session. On a route
+     * without a session, as in the api group, the web guard takes a raw remember cookie for a login, so a guard is needed
+     * only where a route runs behind EnsureFrontendRequestsAreStateful, which Sanctum's statefulApi() puts there.
+     */
+    private function sessionGuardsAreNeeded(Repository $config, Router $router): bool
+    {
+        // Sanctum takes one name or a list, and asks the web guard where the setting is missing.
+        $configured = $config->get('sanctum.guard', 'web');
+        $guards = [];
+
+        foreach (is_array($configured) ? $configured : [$configured] as $guard) {
+            if (is_string($guard) && trim($guard) !== '') {
+                $guards[] = trim($guard);
+            }
+        }
+
+        if ($guards === [] || $this->someRouteIsStateful($router)) {
+            return true;
+        }
+
+        $this->components->error('Sanctum asks the guard '.implode(', ', $guards)." for a session user before it reads a bearer token, and no route signs a client in over the session, so a raw remember cookie signs in to the API without the application key. Leave sanctum-hardening.session_guards empty, or sign the client in through Sanctum's statefulApi().");
+
+        return false;
+    }
+
+    /** Whether a middleware group or a route runs EnsureFrontendRequestsAreStateful. */
+    private function someRouteIsStateful(Router $router): bool
+    {
+        $names = [];
+
+        foreach ($router->getMiddlewareGroups() as $group) {
+            array_push($names, ...array_values(is_array($group) ? $group : []));
+        }
+
+        foreach ($router->getRoutes()->getRoutes() as $route) {
+            array_push($names, ...array_values($route->gatherMiddleware()));
+        }
+
+        return array_any($names, $this->isStateful(...));
+    }
+
+    /**
+     * Whether a middleware a group or a route lists is EnsureFrontendRequestsAreStateful, bare or with parameters.
+     *
+     * @param  mixed  $name  a class name, an alias with its parameters or a closure, as a group or a route lists it
+     */
+    private function isStateful(mixed $name): bool
+    {
+        $stateful = EnsureFrontendRequestsAreStateful::class;
+
+        return is_string($name) && ($name === $stateful || str_starts_with($name, $stateful.':'));
     }
 
     /**

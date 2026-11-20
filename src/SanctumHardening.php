@@ -25,6 +25,27 @@ final class SanctumHardening
     /** The middleware the routes run behind where the settings name none. */
     private const array SHIPPED_MIDDLEWARE = ['api', 'auth:sanctum'];
 
+    /**
+     * The guards Sanctum asks for a signed-in user before it reads a bearer token: the names in
+     * `sanctum-hardening.session_guards`, a list or one name as Sanctum takes it, none unless the
+     * application names them. The provider sets `sanctum.guard` to this list.
+     *
+     * @return list<string>
+     */
+    public static function sessionGuards(Repository $config): array
+    {
+        $guards = $config->get('sanctum-hardening.session_guards');
+        $names = [];
+
+        foreach (is_array($guards) ? $guards : [$guards] as $guard) {
+            if (is_string($guard) && trim($guard) !== '' && ! in_array(trim($guard), $names, true)) {
+                $names[] = trim($guard);
+            }
+        }
+
+        return $names;
+    }
+
     /** Whether the API is switched on. */
     public static function enabled(): bool
     {

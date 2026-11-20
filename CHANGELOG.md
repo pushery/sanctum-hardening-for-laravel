@@ -4,6 +4,16 @@ All notable changes to `pushery/sanctum-hardening-for-laravel` are documented he
 
 A release carries only the sections that have an entry, in this order: `### ⚠️ Breaking`, `### ✨ Added`, `### 🔧 Changed`, `### ⚡ Performance`, `### 🐛 Fixed`, `### 🔒 Security`, `### 🧹 Deprecated`, `### 🗑️ Removed` and `### 📚 Documentation`.
 
+## [0.6.0] - 2026-11-20
+
+### ⚠️ Breaking
+
+- **Sanctum asks no session guard before it reads a bearer token, unless the application names one.** The package sets `sanctum.guard` to the new `sanctum-hardening.session_guards`, an empty list by default, and a `guard` in `config/sanctum.php` has no effect. An application whose single-page client signs in over the session through Sanctum's `statefulApi()` names its guard there, `['web']` for one.
+
+### 🔒 Security
+
+- **A raw remember cookie no longer signs in to the API.** With Sanctum's default guard `web`, a route without a session, as in the `api` group, took the remember cookie as it came for a login, so whoever could read a user's `remember_token`, from a backup or a replica for instance, reached the API with every ability and without the application key. Now only a bearer token signs in, and `sanctum-hardening:doctor` reports a guard in `sanctum.guard` while no route runs behind `EnsureFrontendRequestsAreStateful`.
+
 ## [0.5.0] - 2026-11-20
 
 ### ✨ Added
@@ -165,7 +175,8 @@ A release carries only the sections that have an entry, in this order: `### ⚠�
 - **The prefixes of deleted tokens are pruned.** `sanctum-hardening:prune-prefixes` forgets the prefix of every token that no longer exists, the ones a query deleted included, as `sanctum:prune-expired` deletes them. Schedule it beside Sanctum's prune.
 - **The last use of a token written once a minute.** Sanctum's write of `last_used_at` on every request goes through once every `last_used_at.every` seconds.
 
-[Unreleased]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.3.0...v0.4.0

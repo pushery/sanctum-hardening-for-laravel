@@ -116,6 +116,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Session guards
+    |--------------------------------------------------------------------------
+    | Sanctum asks the guards in `sanctum.guard` for a signed-in user before it reads a bearer
+    | token, and its own default is `web`. On a route without a session, as in the `api` group,
+    | the web guard takes a raw remember cookie for a login, so whoever can read a user's
+    | `remember_token` reaches the API with every ability and without the application key. The
+    | package sets `sanctum.guard` to this list, and a `guard` in `config/sanctum.php` has no
+    | effect. Empty, only a bearer token signs in. Name a guard, `['web']` for one, where a
+    | single-page client signs in over the session through Sanctum's `statefulApi()`.
+    */
+    'session_guards' => [],
+
+    /*
+    |--------------------------------------------------------------------------
     | Throttling
     |--------------------------------------------------------------------------
     | The named limiter the API's routes run behind, in two stages: each token on its own,
