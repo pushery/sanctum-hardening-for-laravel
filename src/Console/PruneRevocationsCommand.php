@@ -23,6 +23,14 @@ final class PruneRevocationsCommand extends Command implements Isolatable
     /** @var string */
     protected $description = 'Delete revoked tokens and the records of their revocation once the retention has passed';
 
+    /**
+     * One run at a time without the `--isolated` flag, so the schedulers of two servers do not delete the same rows
+     * at once.
+     *
+     * @var bool
+     */
+    protected $isolated = true;
+
     public function handle(TokenRevocations $revocations, Repository $config): int
     {
         $setting = $config->get('sanctum-hardening.revocations.keep_days');

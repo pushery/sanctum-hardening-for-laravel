@@ -9,6 +9,7 @@ use Illuminate\Contracts\Console\Isolatable;
 use Pushery\SanctumHardening\Tokens\TokenAlerts;
 use Pushery\SanctumHardening\Tokens\TokenNetworks;
 use Pushery\SanctumHardening\Tokens\TokenPrefixes;
+use Pushery\SanctumHardening\Tokens\TokenRotations;
 use Symfony\Component\Console\Attribute\AsCommand;
 
 /**
@@ -23,17 +24,27 @@ final class PrunePrefixesCommand extends Command implements Isolatable
     protected $signature = 'sanctum-hardening:prune-prefixes';
 
     /** @var string */
-    protected $description = 'Forget the prefixes, the networks and the alerts of tokens that no longer exist';
+    protected $description = 'Forget the prefixes, the networks, the alerts and the rotations of tokens that no longer exist';
 
-    public function handle(TokenPrefixes $prefixes, TokenNetworks $networks, TokenAlerts $alerts): int
+    /**
+     * One run at a time without the `--isolated` flag, so the schedulers of two servers do not walk the same rows at
+     * once.
+     *
+     * @var bool
+     */
+    protected $isolated = true;
+
+    public function handle(TokenPrefixes $prefixes, TokenNetworks $networks, TokenAlerts $alerts, TokenRotations $rotations): int
     {
         $pruned = $prefixes->prune();
         $limits = $networks->prune();
         $mailed = $alerts->prune();
+        $replaced = $rotations->prune();
 
         $this->components->info($pruned === 1 ? 'Forgot the prefix of 1 deleted token.' : "Forgot the prefixes of {$pruned} deleted tokens.");
         $this->components->info($limits === 1 ? 'Forgot the networks of 1 deleted token.' : "Forgot the networks of {$limits} deleted tokens.");
         $this->components->info($mailed === 1 ? 'Forgot the alerts of 1 deleted token.' : "Forgot the alerts of {$mailed} deleted tokens.");
+        $this->components->info($replaced === 1 ? 'Forgot the rotation of 1 deleted token.' : "Forgot the rotations of {$replaced} deleted tokens.");
 
         return self::SUCCESS;
     }

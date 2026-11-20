@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Pushery\SanctumHardening\Tokens;
 
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
@@ -16,29 +18,40 @@ use Symfony\Component\HttpFoundation\IpUtils;
  * address inside one of them: an IPv4 or IPv6 address, or a network in CIDR notation. A request from
  * anywhere else is refused the way a token that does not exist is refused, so the answer does not say
  * that the token is valid. The address is the request's as Laravel reads it, through the proxies the
- * application trusts, never a header the client sets.
+ * application trusts, never a header the client sets. A token is limited to at most
+ * `minting.max_networks_per_token` entries, 50 unless the application sets another number.
  */
 final readonly class TokenNetworks
 {
     public const string TABLE = 'sanctum_hardening_token_networks';
 
+    /** The most addresses and networks a token may be limited to where `minting.max_networks_per_token` names none. */
+    private const int MOST = 50;
+
     /**
      * Limit a token to these addresses and networks, or lift the limit with an empty list.
      *
+     * The old list goes and the new one comes in one transaction. A token without a row is accepted from
+     * any address, so a write that failed between the two would otherwise leave a token without any limit.
+     *
      * @param  array<array-key, mixed>  $networks
      *
-     * @throws MintRefused where one of them is no address and no network
+     * @throws MintRefused where one of them is no address and no network, or where they are more than a token may be
+     *                     limited to
      */
     public function restrict(Model $token, array $networks): void
     {
         $checked = self::checked($networks);
         $key = TokenPrefixes::key($token->getKey());
+        $stored = $checked === [] ? null : json_encode($checked, JSON_THROW_ON_ERROR);
 
-        DB::table(self::TABLE)->where('token_id', $key)->delete();
+        DB::transaction(static function () use ($key, $stored): void {
+            DB::table(self::TABLE)->where('token_id', $key)->delete();
 
-        if ($checked !== []) {
-            DB::table(self::TABLE)->insert(['token_id' => $key, 'networks' => json_encode($checked, JSON_THROW_ON_ERROR)]);
-        }
+            if ($stored !== null) {
+                DB::table(self::TABLE)->insert(['token_id' => $key, 'networks' => $stored]);
+            }
+        });
     }
 
     /**
@@ -82,7 +95,11 @@ final readonly class TokenNetworks
         return $networks === [] || ($address !== null && IpUtils::checkIp($address, $networks));
     }
 
-    /** Forget the networks of a token that was deleted. */
+    /**
+     * Forget the networks of a token that was deleted.
+     *
+     * @param  mixed  $tokenKey  the key of the token as its model holds it, an integer or a string by the type of the key
+     */
     public function forget(mixed $tokenKey): void
     {
         DB::table(self::TABLE)->where('token_id', TokenPrefixes::key($tokenKey))->delete();
@@ -115,6 +132,7 @@ final readonly class TokenNetworks
     /**
      * The list a row keeps as JSON, the entries that are text.
      *
+     * @param  mixed  $stored  the JSON a row keeps, as the connection returns it, which differs between the engines
      * @return list<string>
      */
     private function decoded(mixed $stored): array
@@ -125,12 +143,14 @@ final readonly class TokenNetworks
     }
 
     /**
-     * The entries as they are kept: each trimmed and checked, every one once.
+     * The entries as they are kept: each trimmed and checked, every one once, and no more of them than a token
+     * may be limited to.
      *
      * @param  array<array-key, mixed>  $networks
      * @return list<string>
      *
-     * @throws MintRefused where one of them is no address and no network
+     * @throws MintRefused where one of them is no address and no network, or where they are more than a token
+     *                     may be limited to
      */
     public static function checked(array $networks): array
     {
@@ -146,7 +166,27 @@ final readonly class TokenNetworks
             $checked[] = $entry;
         }
 
-        return array_values(array_unique($checked));
+        $checked = array_values(array_unique($checked));
+        $most = self::most();
+
+        // admits() reads the whole list and checks the address against each entry on every request with the
+        // token, so the length of the list is what each of those requests costs.
+        if (count($checked) > $most) {
+            throw MintRefused::tooManyNetworks($most);
+        }
+
+        return $checked;
+    }
+
+    /**
+     * The most addresses and networks a token may be limited to: `minting.max_networks_per_token`, or MOST where
+     * the setting names no whole number of one or more.
+     */
+    private static function most(): int
+    {
+        $configured = Container::getInstance()->make(Repository::class)->get('sanctum-hardening.minting.max_networks_per_token');
+
+        return is_int($configured) && $configured >= 1 ? $configured : self::MOST;
     }
 
     /**

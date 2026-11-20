@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Pushery\SanctumHardening\Tokens;
 
 use DateTimeInterface;
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Date;
 use Laravel\Sanctum\Sanctum;
@@ -34,6 +36,16 @@ final class Tokens
         $expiresAt = $token->getAttribute('expires_at');
 
         return $expiresAt instanceof DateTimeInterface && $expiresAt->getTimestamp() <= Date::now()->getTimestamp();
+    }
+
+    /**
+     * Whether Sanctum writes the last use of a token to `last_used_at`. It does unless `sanctum.last_used_at`
+     * turns it off, a setting of Sanctum's own that it takes as on where it is missing.
+     */
+    public static function lastUseIsRecorded(): bool
+    {
+        // Sanctum's guard tests the setting as a condition, so whatever it takes for off is off here as well.
+        return (bool) Container::getInstance()->make(Repository::class)->get('sanctum.last_used_at', true);
     }
 
     /**

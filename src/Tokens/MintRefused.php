@@ -10,19 +10,22 @@ use RuntimeException;
  * A token was not minted: the model cannot hold tokens, the signed-in user may not manage the tokens
  * of another tokenable, the password was not confirmed a moment ago, tokens are minted too fast or
  * the tokenable holds as many as allowed, the lifetime asked for is none of the allowed ones, the
- * name is empty or longer than a token's name may be, or an entry of the networks a token is limited
- * to is no address and no network.
+ * name is empty or longer than a token's name may be, an entry of the networks a token is limited
+ * to is no address and no network, or the networks are more than a token may be limited to.
  */
 final class MintRefused extends RuntimeException
 {
     /**
-     * @param  'not_tokenable'|'not_allowed'|'password_not_confirmed'|'too_fast'|'limit_reached'|'lifetime'|'name'|'network'  $reason
+     * @param  'not_tokenable'|'not_allowed'|'password_not_confirmed'|'too_fast'|'limit_reached'|'lifetime'|'name'|'network'|'too_many_networks'  $reason
+     * @param  int|null  $limit  the limit the mint met: the tokens a tokenable may hold, or the networks a token may be limited to
+     * @param  string|null  $network  the entry of the networks that is no address and no network, as it was given
      */
     private function __construct(
         public readonly string $reason,
         string $message,
         public readonly ?int $retryAfter = null,
         public readonly ?int $limit = null,
+        public readonly ?string $network = null,
     ) {
         parent::__construct($message);
     }
@@ -59,7 +62,12 @@ final class MintRefused extends RuntimeException
 
     public static function network(string $entry): self
     {
-        return new self('network', "[{$entry}] is no IPv4 or IPv6 address and no network in CIDR notation, so a token cannot be limited to it.");
+        return new self('network', "[{$entry}] is no IPv4 or IPv6 address and no network in CIDR notation, so a token cannot be limited to it.", network: $entry);
+    }
+
+    public static function tooManyNetworks(int $limit): self
+    {
+        return new self('too_many_networks', "A token can be limited to at most {$limit} addresses and networks.", limit: $limit);
     }
 
     public static function lifetime(int $days): self

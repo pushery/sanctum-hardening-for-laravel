@@ -7,6 +7,7 @@ namespace Pushery\SanctumHardening\Tokens;
 use DateTimeImmutable;
 use DateTimeInterface;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Date;
@@ -15,6 +16,7 @@ use Illuminate\Support\Facades\Notification;
 use Pushery\SanctumHardening\Abilities\AbilityCatalog;
 use Pushery\SanctumHardening\Notifications\TokenExpiring;
 use Pushery\SanctumHardening\Notifications\TokenInactive;
+use Throwable;
 
 /**
  * The mails to the holder of a token before it expires and once it has gone unused.
@@ -23,6 +25,10 @@ use Pushery\SanctumHardening\Notifications\TokenInactive;
  * is used again and then falls silent again is reported again. A token with a reserved ability is left
  * out, because the screen the mail sends its holder to neither lists nor revokes it, and so is one that
  * has expired or was revoked.
+ *
+ * A mail that cannot be sent, because the transport refuses its recipient for instance, ends that mail
+ * alone: its exception goes to the application's exception handler, it is counted as failed, and the
+ * next token is mailed. It is not recorded as sent, so the next run tries it again.
  */
 final readonly class TokenAlerts
 {
@@ -37,21 +43,26 @@ final readonly class TokenAlerts
         private AbilityCatalog $catalog,
         private TokenPrefixes $prefixes,
         private ResolvesTokenAlerts $resolver,
+        private ExceptionHandler $exceptions,
     ) {}
 
     /**
      * Mail the holder of every token that expires within `expiring.days` days, and of every one no request
      * used for `inactive.days` days, a token never used counted from its creation. Say how many mails went
-     * out of each kind, and how many tokens were passed over for want of a recipient or of a page to link.
+     * out of each kind, how many tokens were passed over for want of a recipient or of a page to link, and
+     * how many mails could not be sent.
      *
-     * @return array{expiring: int, inactive: int, unreachable: int, unlinked: int}
+     * The second kind goes out only where Sanctum writes the last use of a token: without it, nothing tells
+     * a token used yesterday from one never used, and every token would read as unused.
+     *
+     * @return array{expiring: int, inactive: int, unreachable: int, unlinked: int, failed: int}
      */
     public function send(int $chunk = 200): array
     {
         $now = Date::now()->toImmutable();
         $model = Tokens::model();
         $expiresAt = $model->qualifyColumn('expires_at');
-        $counts = ['expiring' => 0, 'inactive' => 0, 'unreachable' => 0, 'unlinked' => 0];
+        $counts = ['expiring' => 0, 'inactive' => 0, 'unreachable' => 0, 'unlinked' => 0, 'failed' => 0];
 
         if ($this->enabled(self::EXPIRING)) {
             $due = $model->newQuery()
@@ -61,7 +72,7 @@ final readonly class TokenAlerts
             $counts = $this->sendFor(self::EXPIRING, $due, $chunk, $counts);
         }
 
-        if ($this->enabled(self::INACTIVE)) {
+        if ($this->enabled(self::INACTIVE) && Tokens::lastUseIsRecorded()) {
             $before = $now->subDays($this->days(self::INACTIVE, 90));
             $lastUsedAt = $model->qualifyColumn('last_used_at');
             $createdAt = $model->qualifyColumn('created_at');
@@ -78,7 +89,11 @@ final readonly class TokenAlerts
         return $counts;
     }
 
-    /** Forget the alerts of a token that was deleted. */
+    /**
+     * Forget the alerts of a token that was deleted.
+     *
+     * @param  mixed  $tokenKey  the key of the token as its model holds it, an integer or a string by the type of the key
+     */
     public function forget(mixed $tokenKey): void
     {
         DB::table(self::TABLE)->where('token_id', TokenPrefixes::key($tokenKey))->delete();
@@ -115,8 +130,8 @@ final readonly class TokenAlerts
      *
      * @param  self::EXPIRING|self::INACTIVE  $kind
      * @param  Builder<Model>  $due
-     * @param  array{expiring: int, inactive: int, unreachable: int, unlinked: int}  $counts
-     * @return array{expiring: int, inactive: int, unreachable: int, unlinked: int}
+     * @param  array{expiring: int, inactive: int, unreachable: int, unlinked: int, failed: int}  $counts
+     * @return array{expiring: int, inactive: int, unreachable: int, unlinked: int, failed: int}
      */
     private function sendFor(string $kind, Builder $due, int $chunk, array $counts): array
     {
@@ -155,12 +170,21 @@ final readonly class TokenAlerts
                 $name = is_scalar($name) ? (string) $name : '';
                 $prefix = $prefixes[$key] ?? null;
 
-                Notification::send($recipient, $kind === self::EXPIRING
-                    ? new TokenExpiring($name, $prefix, $occasion, $link)
-                    : new TokenInactive($name, $prefix, $occasion, $link, neverUsed: ! $token->getAttribute('last_used_at') instanceof DateTimeInterface));
+                try {
+                    Notification::send($recipient, $kind === self::EXPIRING
+                        ? new TokenExpiring($name, $prefix, $occasion, $link)
+                        : new TokenInactive($name, $prefix, $occasion, $link, neverUsed: ! $token->getAttribute('last_used_at') instanceof DateTimeInterface));
+                } catch (Throwable $failure) {
+                    // One refused recipient ends its own mail, not the run. Without a row for it, the next run
+                    // tries it again.
+                    $this->exceptions->report($failure);
+                    $counts['failed']++;
+
+                    continue;
+                }
 
                 DB::table(self::TABLE)->upsert(
-                    [['token_id' => $key, 'kind' => $kind, 'occasion_at' => $occasion, 'sent_at' => Date::now()]],
+                    [['token_id' => $key, 'kind' => $kind, 'occasion_at' => Moments::bound($occasion), 'sent_at' => Moments::bound(Date::now())]],
                     ['token_id', 'kind'],
                     ['occasion_at', 'sent_at'],
                 );
@@ -185,14 +209,18 @@ final readonly class TokenAlerts
         return $moment instanceof DateTimeInterface ? DateTimeImmutable::createFromInterface($moment) : null;
     }
 
-    /** Whether the occasion a stored alert names is the moment given, to the second. */
+    /**
+     * Whether the occasion a stored alert names is the moment given, to the second.
+     *
+     * @param  mixed  $stored  the moment a row stores, as the connection returns it, which differs between the engines
+     */
     private function sameMoment(mixed $stored, DateTimeImmutable $moment): bool
     {
         return is_string($stored) && $stored !== '' && new DateTimeImmutable($stored)->getTimestamp() === $moment->getTimestamp();
     }
 
-    /** Whether the alert of `$kind` is on: anything but a setting that names off. */
-    private function enabled(string $kind): bool
+    /** Whether the alert of `$kind`, EXPIRING or INACTIVE, is on: anything but a setting that names off. */
+    public function enabled(string $kind): bool
     {
         $value = $this->config->get("sanctum-hardening.alerts.{$kind}.enabled");
 

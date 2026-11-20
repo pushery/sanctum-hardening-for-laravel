@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\View as ViewFactory;
+use Laravel\Sanctum\NewAccessToken;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Pushery\SanctumHardening\Abilities\AbilityCatalog;
@@ -21,9 +22,9 @@ use Pushery\SanctumHardening\Tokens\MintRefused;
 use Pushery\SanctumHardening\Tokens\PersonalTokens;
 use Pushery\SanctumHardening\Tokens\TokenNetworks;
 use Pushery\SanctumHardening\Tokens\TokenPrefixes;
+use Pushery\SanctumHardening\Tokens\Tokens;
 use Pushery\SanctumHardening\Tokens\TokenUse;
 use Pushery\SanctumHardening\Tokens\TokenUses;
-use Pushery\WireKit\WireKitServiceProvider;
 
 /**
  * The self-service screen of a user's personal access tokens: mint one with the abilities of the
@@ -32,12 +33,16 @@ use Pushery\WireKit\WireKitServiceProvider;
  *
  * Every rule is the one PersonalTokens applies, so the screen offers nothing a mint would refuse: no
  * reserved ability, no lifetime off the list. The plain text of a token exists once, on the answer to
- * its mint, and is gone with the next action.
+ * its mint, and never in the snapshot Livewire writes into the page and the browser sends back with
+ * its next request. The password typed to confirm it is cleared before every answer for the same
+ * reason.
  *
  * Given a `tokenable`, `<livewire:sanctum-hardening.tokens :tokenable="$workspace" />`, the screen
  * manages that holder's tokens instead, where the application's Gate lets the signed-in user, and its
  * texts speak of the holder rather than of the account. Where the password was not confirmed a moment
- * ago, the screen asks for it itself, so it needs no `password.confirm` route on its host.
+ * ago, the screen asks for it itself, so it needs no `password.confirm` route on its host. Given
+ * `:heading="false"`, it leaves out its heading and the sentence under it, for a page that heads it with
+ * a page header of its own.
  */
 final class TokenManager extends Component
 {
@@ -48,7 +53,15 @@ final class TokenManager extends Component
     #[Locked]
     public ?Model $tokenable = null;
 
-    /** The password typed to confirm it on the screen, cleared on every attempt. */
+    /**
+     * Whether the screen shows its heading and the sentence under it. A page that heads the screen itself, with a page
+     * header of its own, passes `:heading="false"`; the parts of the screen keep their heads, one level higher. Locked,
+     * as it is the page's choice.
+     */
+    #[Locked]
+    public bool $heading = true;
+
+    /** The password typed to confirm it on the screen, cleared before every answer by dehydrate(). */
     public string $password = '';
 
     public string $name = '';
@@ -56,14 +69,23 @@ final class TokenManager extends Component
     /** @var list<string> */
     public array $abilities = [];
 
-    public ?int $days = null;
+    /**
+     * The lifetime chosen in the form, in days, null for the default. A select bound without `.number` sends the text of
+     * its option, the empty text of the default among them, and a host's copy of the plain view may lack the modifier, so
+     * the property takes the text as well, and mint() reads it.
+     */
+    public int|string|null $days = null;
 
     /** The addresses and networks the new token may be used from, as typed: one a line, none for anywhere. */
     public string $networks = '';
 
-    public ?string $plainTextToken = null;
-
     public string $status = '';
+
+    /**
+     * The plain text of the token this request minted, for the answer to its mint alone. Protected, so Livewire
+     * leaves it out of the snapshot, and the next request starts without it.
+     */
+    protected ?string $plainTextToken = null;
 
     // Set in boot() on every request, so nothing of them is serialized into the component's snapshot.
     protected PersonalTokens $tokens;
@@ -79,18 +101,50 @@ final class TokenManager extends Component
         $this->request = $request;
     }
 
+    /**
+     * Clear the typed password before the component is written into the snapshot of its answer, whatever action
+     * ran. A password typed while another action was sent, a mint or a revocation, would otherwise travel back to
+     * the page and to the server with every later request.
+     */
+    public function dehydrate(): void
+    {
+        $this->password = '';
+    }
+
+    /**
+     * Mint a token from the form. A refusal is said on the status line, which a screen reader announces, the name's
+     * own among them: PersonalTokens refuses an empty name and one longer than it allows, and the field of a refused
+     * name is marked as well. A refused network names the entry that is no address and no network, so the person
+     * finds the one line among the ones they typed, and marks the field of the networks. So does a list longer than
+     * a token may have, and its line names how many it may.
+     */
     public function mint(): void
     {
-        $this->plainTextToken = null;
-        $this->validate(['name' => ['required', 'string', 'max:255']]);
+        $this->resetErrorBag(['name', 'networks']);
+        $days = $this->chosenDays();
+
+        if ($days === false) {
+            $this->status = $this->line('refused.lifetime');
+
+            return;
+        }
 
         try {
             $minted = $this->tokenable instanceof Model
-                ? $this->tokens->mintFor($this->request, $this->tokenable, $this->name, $this->abilities, $this->days, $this->typedNetworks())
-                : $this->tokens->mint($this->request, $this->name, $this->abilities, $this->days, $this->typedNetworks());
+                ? $this->tokens->mintFor($this->request, $this->tokenable, $this->name, $this->abilities, $days, $this->typedNetworks())
+                : $this->tokens->mint($this->request, $this->name, $this->abilities, $days, $this->typedNetworks());
             $this->plainTextToken = $minted->plainTextToken;
         } catch (AbilityRefused|MintRefused $refusal) {
-            $this->status = $this->line('refused.'.$refusal->reason);
+            $this->status = $this->line('refused.'.$refusal->reason, $refusal instanceof MintRefused ? $this->placeholdersOf($refusal) : []);
+            $field = match ($refusal->reason) {
+                'name' => 'name',
+                'network', 'too_many_networks' => 'networks',
+                default => null,
+            };
+
+            if ($field !== null) {
+                $this->addError($field, $this->status);
+            }
 
             return;
         }
@@ -101,21 +155,52 @@ final class TokenManager extends Component
         $this->status = $this->line('minted');
     }
 
+    /**
+     * Revoke a token of the list. Its row leaves the list, and with it the button that had the focus, so the focus
+     * moves on once the screen is drawn anew: to the revoke button of the token below, to the one of the token above
+     * where the last token went, and to the screen's heading once no token is left, or to the screen itself where it
+     * shows no heading.
+     */
     public function revoke(string $tokenId): void
     {
-        $this->plainTextToken = null;
-        $this->status = $this->line($this->tokens->revoke($this->request, $tokenId, $this->tokenable) ? 'revoked' : 'not_revoked');
+        $listed = $this->tokens->listFor($this->request, $this->tokenable)->map(static fn (Model $token): string => TokenPrefixes::key($token->getKey()))->values()->all();
+        $revoked = $this->tokens->revoke($this->request, $tokenId, $this->tokenable);
+        $this->status = $this->line($revoked ? 'revoked' : 'not_revoked');
+
+        if ($revoked) {
+            $this->js('$el.querySelector('.json_encode($this->focusAfterRevoking($listed, $tokenId), JSON_THROW_ON_ERROR).')?.focus()');
+        }
+    }
+
+    /**
+     * Replace one token of the list by its successor, which is shown once as a new token is, and let the old one work
+     * until the overlap has passed.
+     */
+    public function rotate(string $tokenId): void
+    {
+        try {
+            $successor = $this->tokens->rotate($this->request, $tokenId, $this->tokenable);
+        } catch (AbilityRefused|MintRefused $refusal) {
+            $this->status = $this->line('refused.'.$refusal->reason, $refusal instanceof MintRefused ? $this->placeholdersOf($refusal) : []);
+
+            return;
+        }
+
+        if (! $successor instanceof NewAccessToken) {
+            $this->status = $this->line('not_rotated');
+
+            return;
+        }
+
+        $this->plainTextToken = $successor->plainTextToken;
+        $this->status = $this->line('rotated');
     }
 
     /** Confirm the signed-in user's password on the screen, under the throttle of PersonalTokens. */
     public function confirmPassword(): void
     {
-        $password = $this->password;
-        $this->password = '';
-        $this->plainTextToken = null;
-
         try {
-            $this->status = $this->line($this->tokens->confirmPassword($this->request, $password) ? 'confirmed' : 'not_confirmed');
+            $this->status = $this->line($this->tokens->confirmPassword($this->request, $this->password) ? 'confirmed' : 'not_confirmed');
         } catch (MintRefused) {
             $this->status = $this->line('confirm_too_fast');
         }
@@ -127,22 +212,34 @@ final class TokenManager extends Component
         $catalog = $container->make(AbilityCatalog::class);
         $config = $container->make(Repository::class);
         $owned = $this->tokens->listFor($this->request, $this->tokenable);
+        $replacedUntil = $this->tokens->replacedUntil($owned);
+        $holder = $this->tokenable ?? $this->request->user();
+        $grantable = $catalog->grantable($holder instanceof Model ? $holder : null);
         $endpoint = $config->get('sanctum-hardening.ui.endpoint');
 
         $variant = $config->get('sanctum-hardening.ui.variant');
-        $wireKit = $variant === 'wirekit' || ($variant !== 'plain' && class_exists(WireKitServiceProvider::class));
+        // `auto` takes the WireKit view where the installed WireKit renders it, `wirekit` whatever the version.
+        $wireKit = $variant === 'wirekit' || ($variant !== 'plain' && WireKitView::installed());
 
         return ViewFactory::make($wireKit ? 'sanctum-hardening::wirekit.livewire.token-manager' : 'sanctum-hardening::livewire.token-manager', [
             // The views translate through the contract rather than __() and trans_choice(), which
             // laravel/framework defines and this package does not require.
             'lang' => $this->translator,
+            'domId' => $this->domId(...),
+            'plainTextToken' => $this->plainTextToken,
             'holder' => $this->holdsAnother(),
             'asksForPassword' => ! $this->tokens->passwordConfirmed($this->request),
             'tokens' => $owned,
             'prefixes' => $container->make(TokenPrefixes::class)->of($owned),
+            'replacedUntil' => $replacedUntil,
+            'rotatable' => $owned->reject(static fn (Model $token): bool => Tokens::expired($token) || isset($replacedUntil[TokenPrefixes::key($token->getKey())]))
+                ->map(static fn (Model $token): string => TokenPrefixes::key($token->getKey()))->values()->all(),
+            'overlapHours' => $config->get('sanctum-hardening.rotation.overlap_hours'),
             'limits' => $container->make(TokenNetworks::class)->ofEach($owned),
             'uses' => $this->latestUses($container->make(TokenUses::class)->latestOf($owned)),
-            'grantable' => array_combine($catalog->grantable(), array_map($catalog->label(...), $catalog->grantable())),
+            // Where Sanctum writes no last use, `last_used_at` says nothing about a token, so the views say so.
+            'lastUseRecorded' => Tokens::lastUseIsRecorded(),
+            'grantable' => array_combine($grantable, array_map($catalog->label(...), $grantable)),
             'lifetimes' => $this->tokens->lifetimes(),
             'defaultLifetime' => $this->tokens->defaultLifetime(),
             'allowsNoExpiry' => $config->get('sanctum-hardening.minting.allow_no_expiry') === true,
@@ -157,11 +254,44 @@ final class TokenManager extends Component
     }
 
     /**
+     * The selector of the element the focus moves to once `$revoked` left the list `$listed` showed, newest first: the
+     * revoke button of the token below it, of the token above where it was the last, or the screen's heading, the
+     * screen itself where it shows none.
+     *
+     * @param  array<int, string>  $listed
+     */
+    private function focusAfterRevoking(array $listed, string $revoked): string
+    {
+        $at = array_search($revoked, $listed, true);
+        $beside = is_int($at) ? ($listed[$at + 1] ?? $listed[$at - 1] ?? null) : null;
+
+        // A key is a number or an identifier of letters, digits and dashes; any other character would end the selector.
+        // `$` is enough here: the key is one of the rows this screen has just listed, never a value of the request, and
+        // a key the database or Laravel generates ends in no line feed.
+        return is_string($beside) && preg_match('/^[A-Za-z0-9_-]+$/', $beside) === 1
+            ? '[data-sanctum-hardening-revoke="'.$beside.'"]'
+            : '#'.$this->domId($this->heading ? 'tokens-heading' : 'tokens');
+    }
+
+    /**
+     * The id of the element `$name` of this screen. It carries the id of this instance of the component, so two screens
+     * on one page, the user's and a workspace's, never share an id, and no label names a field of the other one. The
+     * component's id stays the same over its requests, and so do these.
+     */
+    private function domId(string $name): string
+    {
+        // Livewire declares no type for the id; it is the random string it gave the component on mounting it.
+        $component = $this->getId();
+
+        return 'sanctum-hardening-'.$name.'-'.(is_string($component) ? $component : '');
+    }
+
+    /**
      * The latest requests of each token as the views show them: the method, the route and the status,
      * and the moment in the format of the screen's language.
      *
-     * @param  array<string, list<TokenUse>>  $uses
-     * @return array<string, list<array{text: string, meta: string}>>
+     * @param  array<array-key, list<TokenUse>>  $uses
+     * @return array<array-key, list<array{text: string, meta: string}>>
      */
     private function latestUses(array $uses): array
     {
@@ -191,6 +321,25 @@ final class TokenManager extends Component
     }
 
     /**
+     * The lifetime of the form as a mint takes it: null for the default, where nothing or the empty text of the default's
+     * option was chosen, and the number of days otherwise, given as a number or as its text. A text that is no whole
+     * number names no lifetime the screen offers, and the answer is false. Cast, it would be 0, a token without an
+     * expiry wherever one is allowed.
+     */
+    private function chosenDays(): int|false|null
+    {
+        if ($this->days === null || $this->days === '') {
+            return null;
+        }
+
+        if (is_int($this->days)) {
+            return $this->days;
+        }
+
+        return filter_var($this->days, FILTER_VALIDATE_INT, FILTER_NULL_ON_FAILURE) ?? false;
+    }
+
+    /**
      * The entries of the networks field: one a line, and a comma or a space parts them as well, since no
      * address and no network holds either.
      *
@@ -199,6 +348,27 @@ final class TokenManager extends Component
     private function typedNetworks(): array
     {
         return array_values(array_filter(preg_split('/[\s,]+/', $this->networks) ?: [], static fn (string $entry): bool => $entry !== ''));
+    }
+
+    /**
+     * What the line of a refused mint puts in for its placeholders: the entry of the networks it refused, and the
+     * limit it met.
+     *
+     * @return array<string, string>
+     */
+    private function placeholdersOf(MintRefused $refusal): array
+    {
+        $placeholders = [];
+
+        if ($refusal->network !== null) {
+            $placeholders['network'] = $refusal->network;
+        }
+
+        if ($refusal->limit !== null) {
+            $placeholders['limit'] = (string) $refusal->limit;
+        }
+
+        return $placeholders;
     }
 
     /**
@@ -216,12 +386,17 @@ final class TokenManager extends Component
         return ! ($user instanceof Model && $user->getMorphClass() === $this->tokenable->getMorphClass() && $user->is($this->tokenable));
     }
 
-    /** The line of `$key` under `screen`, in the holder's wording where the screen manages another holder and has one. */
-    private function line(string $key): string
+    /**
+     * The line of `$key` under `screen`, in the holder's wording where the screen manages another holder and has one,
+     * with `$replace` put in for its placeholders.
+     *
+     * @param  array<string, string>  $replace
+     */
+    private function line(string $key, array $replace = []): string
     {
         foreach ($this->holdsAnother() ? ['holder.'.$key, $key] : [$key] as $candidate) {
             $name = 'sanctum-hardening::messages.screen.'.$candidate;
-            $line = $this->translator->get($name);
+            $line = $this->translator->get($name, $replace);
 
             if (is_string($line) && $line !== $name) {
                 return $line;

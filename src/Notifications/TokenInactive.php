@@ -25,6 +25,6 @@ final class TokenInactive extends TokenAlert
         $replace = ['name' => $this->name, 'date' => $this->day()];
         $case = $this->neverUsed ? 'never' : 'used';
 
-        return $this->mail(self::text("inactive.subject_{$case}", $replace), self::text("inactive.line_{$case}", $replace), self::text('inactive.risk'));
+        return $this->mail(self::text("inactive.subject_{$case}", $replace), self::markdown("inactive.line_{$case}", $replace), self::text('inactive.risk'));
     }
 }

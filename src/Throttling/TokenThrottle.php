@@ -19,8 +19,8 @@ use Pushery\SanctumHardening\Tokens\TokenPrefixes;
  *
  * A request over either answers `429` as a problem document (RFC 9457) with `Retry-After`, whatever
  * the request asked for, because only an API client meets this limiter. A request nobody is signed
- * in for is counted by its address, kept as a keyed hash: a rate limiter's key is a cache key, and
- * error trackers record cache keys.
+ * in for is counted by its address, an IPv6 address by its /64, kept as a keyed hash: a rate
+ * limiter's key is a cache key, and error trackers record cache keys.
  */
 final readonly class TokenThrottle
 {
@@ -37,15 +37,32 @@ final readonly class TokenThrottle
         $token = $user instanceof Model && method_exists($user, 'currentAccessToken') ? $user->currentAccessToken() : null;
         $holder = $user instanceof Model
             ? 'user:'.$user->getMorphClass().':'.TokenPrefixes::key($user->getKey())
-            : 'address:'.hash_hmac('sha256', (string) $request->ip(), $this->secret());
+            : 'address:'.hash_hmac('sha256', $this->counted((string) $request->ip()), $this->secret());
 
         return [
-            Limit::perMinute($this->positive('per_user', 120))->by('sanctum-hardening:'.$holder)->response($this->tooMany(...)),
+            $this->limit('per_user', 120, 'burst_per_user')->by('sanctum-hardening:'.$holder)->response($this->tooMany(...)),
             // A session or a transient token has no row: its requests count as one token of the holder.
-            Limit::perMinute($this->positive('per_token', 60))
+            $this->limit('per_token', 60, 'burst_per_token')
                 ->by('sanctum-hardening:'.($token instanceof Model ? 'token:'.TokenPrefixes::key($token->getKey()) : 'session:'.$holder))
                 ->response($this->tooMany(...)),
         ];
+    }
+
+    /**
+     * A limit of `$rate` requests a minute on average that lets a quiet holder send up to its burst at once: one window
+     * of `burst` requests, as long as `burst / rate` minutes take, to the second. With no burst above the rate, the
+     * window is the minute, as it always was.
+     */
+    private function limit(string $rate, int $shipped, string $burst): Limit
+    {
+        $perMinute = $this->positive($rate, $shipped);
+        $allowed = $this->config->get('sanctum-hardening.throttle.'.$burst);
+
+        if (! is_int($allowed) || $allowed <= $perMinute) {
+            return Limit::perMinute($perMinute);
+        }
+
+        return new Limit('', $allowed, (int) round($allowed / $perMinute * 60));
     }
 
     /**
@@ -63,6 +80,24 @@ final readonly class TokenThrottle
             429,
             [...$headers, 'Content-Type' => 'application/problem+json'],
         );
+    }
+
+    /**
+     * What a request nobody is signed in for is counted by. An IPv6 address counts by its /64, the
+     * network a single line or host is given, so a client cannot draw a fresh count from each of its
+     * addresses. An IPv4 address counts as it is, and so does one mapped into IPv6, which would
+     * otherwise share the one /64 of every mapped address. Anything else counts as it was given.
+     */
+    private function counted(string $address): string
+    {
+        $packed = filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) === false ? false : inet_pton($address);
+
+        if (! is_string($packed) || str_starts_with($packed, str_repeat("\0", 10)."\xff\xff")) {
+            return $address;
+        }
+
+        // The first eight bytes are the /64, written out in hex; the key is hashed, so no reader sees it.
+        return bin2hex(substr($packed, 0, 8)).'/64';
     }
 
     private function secret(): string

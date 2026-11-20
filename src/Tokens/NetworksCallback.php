@@ -17,9 +17,12 @@ use Illuminate\Http\Request;
  */
 final class NetworksCallback
 {
-    /** The callback the application gave Sanctum, or null where it gave none. */
+    /** @var mixed the callback the application gave Sanctum, or null where it gave none, which Sanctum keeps untyped */
     public static mixed $application = null;
 
+    /**
+     * @param  mixed  $token  the token Sanctum hands its callback, which its API leaves untyped
+     */
     public function __invoke(mixed $token, bool $isValid): bool
     {
         $application = self::$application;
