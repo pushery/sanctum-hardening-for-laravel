@@ -94,6 +94,12 @@ final class SanctumHardeningServiceProvider extends ServiceProvider
 
         RateLimiter::for(is_string($limiter) && $limiter !== '' ? $limiter : 'sanctum-hardening', $this->app->make(TokenThrottle::class)->limits(...));
 
+        // Sanctum asks these guards for a session user before it reads a bearer token, and on a route
+        // without a session the web guard takes a raw remember cookie for a login. Only the guards the
+        // application names in session_guards are asked, none by default.
+        $config = $this->app->make(Repository::class);
+        $config->set('sanctum.guard', SanctumHardening::sessionGuards($config));
+
         // After every provider has booted, so a model the application sets with
         // Sanctum::usePersonalAccessTokenModel() in its own boot() is the one listened to.
         $this->app->booted(function (): void {
