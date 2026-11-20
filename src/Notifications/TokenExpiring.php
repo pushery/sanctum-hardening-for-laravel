@@ -17,6 +17,6 @@ final class TokenExpiring extends TokenAlert
     {
         $replace = ['name' => $this->name, 'date' => $this->day()];
 
-        return $this->mail(self::text('expiring.subject', $replace), self::text('expiring.line', $replace));
+        return $this->mail(self::text('expiring.subject', $replace), self::markdown('expiring.line', $replace));
     }
 }

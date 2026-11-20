@@ -16,7 +16,7 @@ use InvalidArgumentException;
 final class AbilityRefused extends InvalidArgumentException
 {
     /**
-     * @param  'none'|'wildcard'|'unknown'|'reserved'|'malformed'  $reason
+     * @param  'none'|'wildcard'|'unknown'|'reserved'|'holder'|'malformed'  $reason
      * @param  list<string>  $abilities  the abilities the refusal is about
      */
     private function __construct(
@@ -47,6 +47,12 @@ final class AbilityRefused extends InvalidArgumentException
     public static function reserved(array $abilities): self
     {
         return new self('reserved', $abilities, '['.implode(', ', $abilities).'] is reserved for the application\'s own code and cannot be minted through the self-service.');
+    }
+
+    /** @param  list<string>  $abilities */
+    public static function notForHolder(array $abilities): self
+    {
+        return new self('holder', $abilities, '['.implode(', ', $abilities).'] cannot be carried by this holder: the catalog names other holders for it.');
     }
 
     public static function malformed(string $ability): self

@@ -21,6 +21,9 @@ final readonly class RecordsTokenUse
 {
     public function __construct(private TokenUses $uses) {}
 
+    /**
+     * @return mixed what the rest of the middleware returns, which Laravel leaves untyped
+     */
     public function handle(Request $request, Closure $next): mixed
     {
         return $next($request);

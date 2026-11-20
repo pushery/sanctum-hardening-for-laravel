@@ -6,6 +6,7 @@ namespace Pushery\SanctumHardening\Tokens;
 
 use DateTimeImmutable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Schema\Builder;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 
@@ -23,25 +24,39 @@ final readonly class TokenRevocations
 
     /**
      * Revoke a token now, and record it: `$by` is the signed-in user who revoked it, or null for the
-     * application's own code.
+     * application's own code. Whether this call revoked the token: one revoked before keeps the
+     * record of that revocation and the expiry it was given then, and revoking it again changes
+     * nothing and answers false. A loop over every token of a user therefore goes on past one revoked
+     * earlier, and of two requests that revoke the same token at once, the second answers false.
+     *
+     * The record keeps as much of the token's name as its column holds. Sanctum keeps the name as
+     * text, so a token named longer outside the package, through `createToken()`, would fail the
+     * insert, and the token would stay valid. The column is a string of the length Laravel gives
+     * one, 255 characters unless the application set another with `Schema::defaultStringLength()`.
      */
-    public function revoke(Model $token, ?Model $by): void
+    public function revoke(Model $token, ?Model $by): bool
     {
         $now = Date::now();
 
-        DB::transaction(static function () use ($token, $by, $now): void {
-            DB::table(self::TABLE)->insert([
+        return DB::connection()->transaction(static function () use ($token, $by, $now): bool {
+            // The record is keyed by the token, so the insert of a second revocation finds the first record and
+            // writes nothing, rather than failing on the key, and the token keeps the expiry it was given then.
+            $recorded = DB::table(self::TABLE)->insertOrIgnore([
                 'token_id' => TokenPrefixes::key($token->getKey()),
-                'token_name' => self::text($token->getAttribute('name')),
+                'token_name' => mb_substr(self::text($token->getAttribute('name')), 0, Builder::$defaultStringLength),
                 'tokenable_type' => self::text($token->getAttribute('tokenable_type')),
                 'tokenable_id' => TokenPrefixes::key($token->getAttribute('tokenable_id')),
                 'revoked_by_type' => $by?->getMorphClass(),
                 'revoked_by_id' => $by instanceof Model ? TokenPrefixes::key($by->getKey()) : null,
-                'revoked_at' => $now,
-            ]);
+                'revoked_at' => Moments::bound($now),
+            ]) > 0;
 
-            $token->setAttribute('expires_at', $now);
-            $token->save();
+            if ($recorded) {
+                $token->setAttribute('expires_at', $now);
+                $token->save();
+            }
+
+            return $recorded;
         });
     }
 
@@ -107,20 +122,25 @@ final readonly class TokenRevocations
         $pruned = 0;
 
         // By key rather than by offset, so the rows deleted on the way make the walk skip none.
-        foreach (DB::table(self::TABLE)->where('revoked_at', '<', $before)->select('token_id')->lazyById($size, 'token_id')->chunk($size) as $rows) {
+        foreach (DB::table(self::TABLE)->where('revoked_at', '<', Moments::bound($before))->select('token_id')->lazyById($size, 'token_id')->chunk($size) as $rows) {
             $keys = array_values(array_filter($rows->pluck('token_id')->all(), is_string(...)));
 
             $model->newQuery()->whereIn($model->getKeyName(), $keys)->delete();
             DB::table(TokenPrefixes::TABLE)->whereIn('token_id', $keys)->delete();
             DB::table(TokenNetworks::TABLE)->whereIn('token_id', $keys)->delete();
             DB::table(TokenAlerts::TABLE)->whereIn('token_id', $keys)->delete();
+            DB::table(TokenRotations::TABLE)->whereIn('token_id', $keys)->delete();
             $pruned += DB::table(self::TABLE)->whereIn('token_id', $keys)->delete();
         }
 
         return $pruned;
     }
 
-    /** A value a row holds as the text it is stored as. */
+    /**
+     * A value a row holds as the text it is stored as.
+     *
+     * @param  mixed  $value  the value of a column, as the connection returns it, which differs between the engines
+     */
     private static function text(mixed $value): string
     {
         return is_scalar($value) ? (string) $value : '';

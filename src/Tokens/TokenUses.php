@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use stdClass;
 
 /**
  * The requests each token made, kept for `usage.keep_days` days.
@@ -40,7 +41,7 @@ final readonly class TokenUses
             'method' => mb_substr($method, 0, 10),
             'route' => mb_substr($route, 0, 255),
             'status' => $status,
-            'used_at' => Date::now(),
+            'used_at' => Moments::bound(Date::now()),
         ]);
     }
 
@@ -61,32 +62,60 @@ final readonly class TokenUses
             ->get();
 
         foreach ($rows as $row) {
-            $uses[] = new TokenUse(
-                $this->text($row->method ?? null),
-                $this->text($row->route ?? null),
-                is_numeric($row->status ?? null) ? (int) $row->status : 0,
-                new DateTimeImmutable($this->text($row->used_at ?? null)),
-            );
+            $uses[] = $this->useOf($row);
         }
 
         return $uses;
     }
 
     /**
-     * The latest uses of each of the given tokens, by token key.
+     * The latest uses of each of the given tokens, by token key, the newest first, read in one query for all of them:
+     * a list of tokens costs as much as a single token. A key that is a number, as Sanctum's are, is an integer
+     * key of the array, because PHP stores it as one.
      *
      * @param  iterable<Model>  $tokens
-     * @return array<string, list<TokenUse>>
+     * @return array<array-key, list<TokenUse>>
      */
     public function latestOf(iterable $tokens, int $count = 5): array
     {
         $uses = [];
+        $keys = [];
 
         foreach ($tokens as $token) {
-            $uses[TokenPrefixes::key($token->getKey())] = $this->latest($token, $count);
+            $key = TokenPrefixes::key($token->getKey());
+            $uses[$key] = [];
+            $keys[] = $key;
+        }
+
+        if ($keys === []) {
+            return [];
+        }
+
+        // Numbered within each token, the newest first, and cut after `$count`; the rows come ordered by that number,
+        // so each token's come newest first.
+        $rows = DB::table(self::TABLE)
+            ->whereIn('token_id', $keys)
+            ->orderByDesc('used_at')
+            ->orderByDesc('id')
+            ->groupLimit(max(1, $count), 'token_id')
+            ->get();
+
+        foreach ($rows as $row) {
+            $uses[$this->text($row->token_id ?? null)][] = $this->useOf($row);
         }
 
         return $uses;
+    }
+
+    /** A use as a row of the table holds it. */
+    private function useOf(stdClass $row): TokenUse
+    {
+        return new TokenUse(
+            $this->text($row->method ?? null),
+            $this->text($row->route ?? null),
+            is_numeric($row->status ?? null) ? (int) $row->status : 0,
+            new DateTimeImmutable($this->text($row->used_at ?? null)),
+        );
     }
 
     /**
@@ -99,7 +128,7 @@ final readonly class TokenUses
 
         return DB::table(self::TABLE)
             ->where('token_id', TokenPrefixes::key($token->getKey()))
-            ->whereBetween('used_at', [DateTimeImmutable::createFromInterface($from)->setTimezone($zone), DateTimeImmutable::createFromInterface($until)->setTimezone($zone)])
+            ->whereBetween('used_at', [Moments::bound(DateTimeImmutable::createFromInterface($from)->setTimezone($zone)), Moments::bound(DateTimeImmutable::createFromInterface($until)->setTimezone($zone))])
             ->exists();
     }
 
@@ -111,7 +140,7 @@ final readonly class TokenUses
         $pruned = 0;
 
         // By key rather than by offset, so the rows deleted on the way make the walk skip none.
-        foreach (DB::table(self::TABLE)->where('used_at', '<', $before)->select('id')->lazyById($size)->chunk($size) as $rows) {
+        foreach (DB::table(self::TABLE)->where('used_at', '<', Moments::bound($before))->select('id')->lazyById($size)->chunk($size) as $rows) {
             $pruned += DB::table(self::TABLE)->whereIn('id', $rows->pluck('id')->all())->delete();
         }
 
@@ -126,7 +155,11 @@ final readonly class TokenUses
         return is_int($value) && $value >= 1 ? $value : $shipped;
     }
 
-    /** A value a row holds as the text it is stored as. */
+    /**
+     * A value a row holds as the text it is stored as.
+     *
+     * @param  mixed  $value  the value of a column, as the connection returns it, which differs between the engines
+     */
     private function text(mixed $value): string
     {
         return is_scalar($value) ? (string) $value : '';

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\SanctumHardening\Tokens;
 
+use DateTimeImmutable;
 use DateTimeInterface;
 use Illuminate\Cache\RateLimiter;
 use Illuminate\Contracts\Auth\Access\Gate;
@@ -50,8 +51,11 @@ final readonly class PersonalTokens
     /** The longest name a token may have, the length the self-service screen allows. */
     public const int LONGEST_NAME = 255;
 
-    /** The wrong passwords a user may type into confirmPassword() a minute, from one address. */
+    /** The wrong passwords a user may type into confirmPassword() a minute, from every address and session together. */
     public const int CONFIRM_ATTEMPTS = 5;
+
+    /** The seconds a confirmation stays good for the one mint it covers, where `minting.password_timeout` is 0. */
+    public const int ONE_MINT_WINDOW = 300;
 
     public function __construct(
         private AbilityCatalog $catalog,
@@ -63,6 +67,7 @@ final readonly class PersonalTokens
         private TokenRevocations $revocations,
         private TokenNetworks $networks,
         private Hasher $hasher,
+        private TokenRotations $rotations = new TokenRotations,
     ) {}
 
     /**
@@ -98,6 +103,72 @@ final readonly class PersonalTokens
      */
     public function mintFor(Request $request, Model $tokenable, string $name, array $abilities, ?int $days = null, array $networks = []): NewAccessToken
     {
+        return $this->mintChecked($request, $tokenable, $name, $abilities, $days, $networks, rotating: false);
+    }
+
+    /**
+     * Rotate one token of the list listFor() gives for the same request and tokenable: mint its successor with the
+     * old token's name, abilities, networks and lifetime, and end the old one after the overlap, so whatever still
+     * calls with the old key has that long to take the new one. The successor, or null where the token is not in that
+     * list, has expired, or was replaced already.
+     *
+     * A rotation is a mint and asks what a mint asks: the confirmed password, the pace, and abilities and networks the
+     * token may still be given. It is not refused at the limit of tokens: for the overlap the old token and its
+     * successor are one token's two keys, and a holder at the limit is the one who most needs to rotate.
+     *
+     * @param  int|null  $overlapHours  how long the old token keeps holding, `rotation.overlap_hours` where null
+     *
+     * @throws AbilityRefused|MintRefused
+     */
+    public function rotate(Request $request, int|string $tokenId, ?Model $tokenable = null, ?int $overlapHours = null): ?NewAccessToken
+    {
+        $owner = $tokenable ?? $request->user();
+        $token = $this->listFor($request, $tokenable)->first(static fn (Model $token): bool => TokenPrefixes::key($token->getKey()) === (string) $tokenId);
+
+        if (! $owner instanceof Model || ! $token instanceof Model || Tokens::expired($token) || $this->rotations->endsOf([$token]) !== []) {
+            return null;
+        }
+
+        $name = $token->getAttribute('name');
+        $successor = $this->mintChecked(
+            $request,
+            $owner,
+            is_string($name) ? $name : '',
+            Tokens::abilitiesOf($token),
+            $this->lifetimeOf($token),
+            $this->networks->of($token),
+            rotating: true,
+        );
+
+        $by = $request->user();
+        $hours = max(1, $overlapHours ?? $this->positive('rotation.overlap_hours', 24));
+        $this->rotations->record($token, $successor->accessToken, Date::now()->addHours($hours), $by instanceof Model ? $by : null);
+
+        return $successor;
+    }
+
+    /**
+     * When each of these tokens that was replaced by a rotation stops holding, by token key.
+     *
+     * @param  iterable<Model>  $tokens
+     * @return array<string, DateTimeImmutable>
+     */
+    public function replacedUntil(iterable $tokens): array
+    {
+        return $this->rotations->endsOf($tokens);
+    }
+
+    /**
+     * The mint of mintFor(), and of rotate() where `$rotating`, which does not count the holder's tokens against the
+     * limit.
+     *
+     * @param  array<array-key, mixed>  $abilities
+     * @param  array<array-key, mixed>  $networks
+     *
+     * @throws AbilityRefused|MintRefused
+     */
+    private function mintChecked(Request $request, Model $tokenable, string $name, array $abilities, ?int $days, array $networks, bool $rotating): NewAccessToken
+    {
         if (! method_exists($tokenable, 'createToken')) {
             throw MintRefused::notTokenable();
         }
@@ -112,7 +183,7 @@ final readonly class PersonalTokens
 
         $this->refuseUnnamed($name);
 
-        $granted = $this->catalog->check($abilities);
+        $granted = $this->catalog->check($abilities, holder: $tokenable);
         $limitedTo = TokenNetworks::checked($networks);
         $expiresAt = $this->expiryFor($days);
         $holder = 'sanctum-hardening:mint:'.$tokenable->getMorphClass().':'.TokenPrefixes::key($tokenable->getKey());
@@ -132,8 +203,15 @@ final readonly class PersonalTokens
 
             $limit = min($this->positive('minting.max_tokens_per_user', 20), $this->limits->limitFor($tokenable) ?? PHP_INT_MAX);
 
-            if ($this->tokensOf($tokenable, true)->count() >= $limit) {
+            if (! $rotating && $this->tokensOf($tokenable, true)->count() >= $limit) {
                 throw MintRefused::limitReached($limit);
+            }
+
+            // Where each mint asks for the password, this one spends the confirmation it was let through on. The mark
+            // is kept in the cache rather than the session: another request of the session, sent at the same moment,
+            // carries a copy of the session read before this one wrote anything.
+            if ($this->confirmsEachMint() && ! Cache::add($this->spent($request, $this->confirmedAt($request) ?? 0), true, self::ONE_MINT_WINDOW)) {
+                throw MintRefused::passwordNotConfirmed();
             }
 
             $created = $tokenable->createToken($name, $granted, $expiresAt);
@@ -194,7 +272,9 @@ final readonly class PersonalTokens
 
     /**
      * Revoke one token of the list listFor() gives for the same request and tokenable, never one with
-     * a reserved ability, as the signed-in user of the request; whether one was revoked.
+     * a reserved ability, as the signed-in user of the request; whether one was revoked. A token that
+     * another request revoked after this one read the list, from a second screen for instance, keeps
+     * that revocation, and the answer is false.
      */
     public function revoke(Request $request, int|string $tokenId, ?Model $tokenable = null): bool
     {
@@ -205,9 +285,8 @@ final readonly class PersonalTokens
         }
 
         $by = $request->user();
-        $this->revocations->revoke($token, $by instanceof Model ? $by : null);
 
-        return true;
+        return $this->revocations->revoke($token, $by instanceof Model ? $by : null);
     }
 
     /**
@@ -276,22 +355,67 @@ final readonly class PersonalTokens
 
     /**
      * Whether the session confirmed the password within the timeout, the way Laravel's
-     * `password.confirm` middleware records it.
+     * `password.confirm` middleware records it. Where `minting.password_timeout` is 0, which asks for
+     * the password before every mint, a confirmation covers the one mint after it: it stays good for
+     * ONE_MINT_WINDOW seconds, until a mint spends it.
+     *
+     * Where `minting.password_timeout` is null, Laravel's `auth.password_timeout` counts, read the way
+     * `password.confirm` reads it: 0, an empty value and none at all mean three hours.
      */
     public function passwordConfirmed(Request $request): bool
     {
-        $timeout = $this->config->get('sanctum-hardening.minting.password_timeout') ?? $this->config->get('auth.password_timeout', 10_800);
+        $confirmedAt = $this->confirmedAt($request);
+
+        if ($confirmedAt !== null && $this->confirmsEachMint()) {
+            return Date::now()->getTimestamp() - $confirmedAt <= self::ONE_MINT_WINDOW && ! Cache::has($this->spent($request, $confirmedAt));
+        }
+
+        $timeout = $this->config->get('sanctum-hardening.minting.password_timeout') ?? ($this->config->get('auth.password_timeout') ?: 10_800);
+
+        return $confirmedAt !== null && is_numeric($timeout) && Date::now()->getTimestamp() - $confirmedAt <= (int) $timeout;
+    }
+
+    /** The moment the session recorded the password confirmation at, or null where it holds none it can read. */
+    private function confirmedAt(Request $request): ?int
+    {
         $confirmedAt = $request->hasSession() ? $request->session()->get('auth.password_confirmed_at') : null;
 
-        return is_numeric($confirmedAt) && is_numeric($timeout) && Date::now()->getTimestamp() - (int) $confirmedAt <= (int) $timeout;
+        return is_numeric($confirmedAt) ? (int) $confirmedAt : null;
+    }
+
+    /** Whether `minting.password_timeout` is 0, which asks for the password before every mint. */
+    private function confirmsEachMint(): bool
+    {
+        $timeout = $this->config->get('sanctum-hardening.minting.password_timeout');
+
+        return is_numeric($timeout) && (int) $timeout === 0;
+    }
+
+    /**
+     * The cache key that marks the confirmation the session recorded at `$confirmedAt` as spent by a mint
+     * of the signed-in user. It names the user and the moment, nothing a person typed.
+     */
+    private function spent(Request $request, int $confirmedAt): string
+    {
+        $user = $request->user();
+        $holder = $user instanceof Model ? $user->getMorphClass().':'.TokenPrefixes::key($user->getKey()) : '';
+
+        return 'sanctum-hardening:confirmation-spent:'.$holder.':'.$confirmedAt;
     }
 
     /**
      * Check the password of the signed-in user of the request against the one the user's model holds,
      * as the Eloquent user provider checks it, and record the confirmation in the request's session the
      * way `password.confirm` does; whether it was the password. A request without a signed-in user or
-     * without a session confirms nothing. CONFIRM_ATTEMPTS wrong passwords a minute for the user and
-     * the address, and the next attempt is refused before the password is read.
+     * without a session confirms nothing. CONFIRM_ATTEMPTS wrong passwords a minute for the user, from
+     * every address and session together, and the next attempt is refused before the password is read.
+     * A session is bound to no address, so whoever holds one sends from as many addresses as they have,
+     * and a count for each address would give them CONFIRM_ATTEMPTS for every one. Only a signed-in
+     * user reaches the count, so nobody without a session of the user can use it up.
+     *
+     * Every attempt is counted before the password is read, and the right password clears the count.
+     * Requests of one session run at once, and a count read before a slow hash and raised after it let
+     * each request that arrived during the hash find the count of before and check one more password.
      *
      * @throws MintRefused too_fast once the attempts of the minute are used up
      */
@@ -303,15 +427,14 @@ final readonly class PersonalTokens
             return false;
         }
 
-        $attempts = 'sanctum-hardening:confirm:'.$user->getMorphClass().':'.TokenPrefixes::key($user->getKey()).'|'.$request->ip();
+        $attempts = 'sanctum-hardening:confirm:'.$user->getMorphClass().':'.TokenPrefixes::key($user->getKey());
 
-        if ($this->limiter->tooManyAttempts($attempts, self::CONFIRM_ATTEMPTS)) {
+        // The count the increment answers is this attempt's own, however many arrive at once.
+        if ($this->limiter->hit($attempts, 60) > self::CONFIRM_ATTEMPTS) {
             throw MintRefused::tooFast($this->limiter->availableIn($attempts));
         }
 
         if (! $this->hasher->check($password, $user->getAuthPassword())) {
-            $this->limiter->hit($attempts, 60);
-
             return false;
         }
 
@@ -319,6 +442,24 @@ final readonly class PersonalTokens
         $request->session()->put('auth.password_confirmed_at', Date::now()->getTimestamp());
 
         return true;
+    }
+
+    /**
+     * The lifetime the successor of a token is given: the old token's, in whole days, where it is one a token may be
+     * given; none where the old one had none and that is allowed; the default lifetime otherwise.
+     */
+    private function lifetimeOf(Model $token): ?int
+    {
+        $expires = $token->getAttribute('expires_at');
+
+        if (! $expires instanceof DateTimeInterface) {
+            return $this->config->get('sanctum-hardening.minting.allow_no_expiry') === true ? 0 : null;
+        }
+
+        $created = $token->getAttribute('created_at');
+        $days = $created instanceof DateTimeInterface ? (int) round(($expires->getTimestamp() - $created->getTimestamp()) / 86400) : 0;
+
+        return in_array($days, $this->lifetimes(), true) ? $days : null;
     }
 
     /** The expiry of a token of `$days` days: null for none where that is allowed. */
@@ -347,7 +488,7 @@ final readonly class PersonalTokens
         $configured = $this->config->get('sanctum-hardening.minting.lifetimes', []);
         $longest = $this->positive('minting.max_lifetime', 365);
 
-        return array_values(array_filter(is_array($configured) ? $configured : [], static fn (mixed $days): bool => is_int($days) && $days >= 1 && $days <= $longest));
+        return array_values(array_filter(array_filter(is_array($configured) ? $configured : [], is_int(...)), static fn (int $days): bool => $days >= 1 && $days <= $longest));
     }
 
     /**

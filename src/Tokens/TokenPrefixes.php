@@ -44,7 +44,7 @@ final readonly class TokenPrefixes
         DB::table(self::TABLE)->insert([
             'token_id' => self::key($token->accessToken->getKey()),
             'display_prefix' => mb_substr($constant, 0, self::CONSTANT).mb_substr(substr($secret, strlen($constant)), 0, self::LENGTH),
-            'created_at' => Date::now(),
+            'created_at' => Moments::bound(Date::now()),
         ]);
     }
 
@@ -96,13 +96,21 @@ final readonly class TokenPrefixes
         return $pruned;
     }
 
-    /** Forget the prefix of a token that was deleted. */
+    /**
+     * Forget the prefix of a token that was deleted.
+     *
+     * @param  mixed  $tokenKey  the key of the token as its model holds it, an integer or a string by the type of the key
+     */
     public function forget(mixed $tokenKey): void
     {
         DB::table(self::TABLE)->where('token_id', self::key($tokenKey))->delete();
     }
 
-    /** A token's or a user's key as the string it is stored under. */
+    /**
+     * A token's or a user's key as the string it is stored under.
+     *
+     * @param  mixed  $key  the key as the model holds it, an integer or a string by the type of the key
+     */
     public static function key(mixed $key): string
     {
         return is_scalar($key) ? (string) $key : '';

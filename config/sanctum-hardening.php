@@ -25,6 +25,12 @@ return [
     | So the spellings that switch it off are named, trimmed and in any case, and anything
     | else keeps the value shipped here. An empty line, as copying a template of a .env
     | leaves one, keeps it too, as a missing line does.
+    |
+    | Each route of SanctumHardening::routes() reads the switch on every request as well, so a
+    | route that `php artisan route:cache` cached while the API was on answers 404 once it is
+    | off. With a cached configuration the switch is read from that cache: it takes effect when
+    | the configuration is cached again, and `php artisan optimize` caches the configuration
+    | first and the routes after it.
     */
     'enabled' => EnvSwitch::read(env('SANCTUM_HARDENING_ENABLED'), true),
 
@@ -34,7 +40,9 @@ return [
     |--------------------------------------------------------------------------
     | Every ability a token can carry, with the label a person reads: a translation key or
     | the text itself. There is no wildcard. A token names what it may do and only narrows
-    | what its user may do anyway, so granting one is safe for any user.
+    | what its user may do anyway, so granting one is safe for any user. An entry can name the
+    | holders that may carry it, by morph class or class name: 'links:write' => ['label' =>
+    | 'Write links', 'holders' => [App\Models\Workspace::class]].
     |
     | `reserved` names abilities only the application's own code mints, such as the token a
     | device signs in with. The self-service neither offers them nor lists or revokes a token
@@ -61,7 +69,12 @@ return [
     | A token lives for one of the `lifetimes`, in days, and never longer than
     | `max_lifetime`. A token without an expiry exists only where `allow_no_expiry` says so.
     | The self-service mints only behind a password confirmed within `password_timeout`
-    | seconds, or Laravel's `auth.password_timeout` where it is null.
+    | seconds, or Laravel's `auth.password_timeout` where it is null, read the way
+    | `password.confirm` reads it: 0 or an empty value there means three hours.
+    |
+    | A token is limited to at most `max_networks_per_token` addresses and networks, at its
+    | mint and in restrict() of TokenNetworks. Every request with a limited token reads its
+    | whole list and checks the address against each entry, so the list is held short.
     */
     'minting' => [
         'max_tokens_per_user' => is_numeric($cap = env('SANCTUM_HARDENING_MAX_TOKENS_PER_USER')) && (int) $cap >= 1
@@ -79,10 +92,14 @@ return [
             : 365,
         // Loosens a mint, so only an explicit yes turns it on, and a typo keeps it off.
         'allow_no_expiry' => EnvSwitch::read(env('SANCTUM_HARDENING_ALLOW_NO_EXPIRY'), false),
-        // Zero asks for the password before every mint.
+        // Zero asks for the password before every mint: a confirmation covers the one mint made
+        // within five minutes of it, and that mint spends it.
         'password_timeout' => is_numeric($passwordTimeout = env('SANCTUM_HARDENING_PASSWORD_TIMEOUT')) && (int) $passwordTimeout >= 0
             ? (int) $passwordTimeout
             : null,
+        'max_networks_per_token' => is_numeric($maxNetworks = env('SANCTUM_HARDENING_MAX_NETWORKS_PER_TOKEN')) && (int) $maxNetworks >= 1
+            ? (int) $maxNetworks
+            : 50,
     ],
 
     /*
@@ -105,6 +122,11 @@ return [
     | and each user over all of their tokens. Without the second, a user gets past every
     | limit of a token by minting another one. A request over either answers `429` with
     | `Retry-After`, as a problem document.
+    |
+    | A burst lets a holder that was quiet send more at once than its rate a minute: with
+    | `per_token` 300 and `burst_per_token` 600, a token sends up to 600 in a window of two
+    | minutes, 300 a minute on average. Unset, or no larger than the rate, the window is the
+    | minute. The user's limit has to hold a token's burst, or it refuses first.
     */
     'throttle' => [
         'limiter' => 'sanctum-hardening',
@@ -114,6 +136,12 @@ return [
         'per_user' => is_numeric($perUser = env('SANCTUM_HARDENING_PER_USER')) && (int) $perUser >= 1
             ? (int) $perUser
             : 120,
+        'burst_per_token' => is_numeric($burstPerToken = env('SANCTUM_HARDENING_BURST_PER_TOKEN')) && (int) $burstPerToken >= 1
+            ? (int) $burstPerToken
+            : null,
+        'burst_per_user' => is_numeric($burstPerUser = env('SANCTUM_HARDENING_BURST_PER_USER')) && (int) $burstPerUser >= 1
+            ? (int) $burstPerUser
+            : null,
     ],
 
     /*
@@ -140,6 +168,21 @@ return [
         'keep_days' => is_numeric($revocationDays = env('SANCTUM_HARDENING_REVOCATIONS_KEEP_DAYS')) && (int) $revocationDays >= 1
             ? (int) $revocationDays
             : 90,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Rotation
+    |--------------------------------------------------------------------------
+    | A rotation mints a token's successor with the old token's name, abilities, networks and
+    | lifetime, and ends the old token `overlap_hours` hours later, so whatever still calls with
+    | the old key has that long to take the new one. The expiry alert names the end before it
+    | comes, as it does for any token about to expire.
+    */
+    'rotation' => [
+        'overlap_hours' => is_numeric($overlapHours = env('SANCTUM_HARDENING_ROTATION_OVERLAP_HOURS')) && (int) $overlapHours >= 1
+            ? (int) $overlapHours
+            : 24,
     ],
 
     /*
@@ -189,7 +232,7 @@ return [
     | Screen
     |--------------------------------------------------------------------------
     | The view set of the self-service screen, <livewire:sanctum-hardening.tokens />:
-    | `wirekit`, `plain`, or `auto` for WireKit where pushery/wirekit is installed.
+    | `wirekit`, `plain`, or `auto` for WireKit where pushery/wirekit 2.67.0 or later is installed.
     |
     | `endpoint` is the address the screen's quickstart sends a request to. Null names the
     | routes' prefix on the host of the page; an API that answers on a host of its own, such
@@ -208,6 +251,11 @@ return [
     | limiter above comes last on its own, so a renamed limiter needs no second change here.
     | `middleware` takes a list or one middleware as a string; a setting that names none keeps
     | `api` and `auth:sanctum`.
+    |
+    | These values fit a call outside Laravel's `api` group, in the `then` callback of
+    | withRouting() in bootstrap/app.php. Laravel loads routes/api.php under the prefix and
+    | the middleware `api` already, so a call there takes `prefix` '' and `middleware`
+    | ['auth:sanctum'], and names the address of the API in `ui.endpoint` above.
     */
     'routes' => [
         'prefix' => 'api',

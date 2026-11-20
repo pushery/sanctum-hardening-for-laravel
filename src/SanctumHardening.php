@@ -8,6 +8,7 @@ use Closure;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Facades\Route;
+use Pushery\SanctumHardening\Http\EnsureApiIsEnabled;
 use Pushery\SanctumHardening\Http\RecordsTokenUse;
 
 /**
@@ -15,7 +16,9 @@ use Pushery\SanctumHardening\Http\RecordsTokenUse;
  * that removes it.
  *
  * Switched off, routes() registers nothing: the API's routes do not exist, so a request meets no 403
- * and no 404 from a route that refuses, but no route at all, and `route:list` names none.
+ * and no 404 from a route that refuses, but no route at all, and `route:list` names none. A route
+ * registered while the API was on, which a host that caches its routes keeps until it caches them
+ * again, answers the same 404 through EnsureApiIsEnabled, which reads the switch on every request.
  */
 final class SanctumHardening
 {
@@ -31,7 +34,8 @@ final class SanctumHardening
     /**
      * Register the application's API routes under the configured prefix, behind the configured
      * middleware and the throttle of the package's limiter, or none at all while the API is off. Every
-     * request a token makes there is recorded, see TokenUses.
+     * request a token makes there is recorded, see TokenUses. The switch comes first, before the token
+     * guard, so a route that outlives the switch in a cached table answers every request with a 404.
      */
     public static function routes(Closure $routes): void
     {
@@ -44,6 +48,7 @@ final class SanctumHardening
 
         Route::prefix(is_string($prefix) ? $prefix : 'api')
             ->middleware([
+                EnsureApiIsEnabled::class,
                 ...self::middleware(),
                 RecordsTokenUse::class,
                 'throttle:'.(is_string($limiter) && $limiter !== '' ? $limiter : 'sanctum-hardening'),
@@ -73,6 +78,9 @@ final class SanctumHardening
         return $named === [] ? self::SHIPPED_MIDDLEWARE : $named;
     }
 
+    /**
+     * @return mixed the setting as the configuration holds it, which a host may write as any type
+     */
     private static function setting(string $key): mixed
     {
         return Container::getInstance()->make(Repository::class)->get('sanctum-hardening.'.$key);
