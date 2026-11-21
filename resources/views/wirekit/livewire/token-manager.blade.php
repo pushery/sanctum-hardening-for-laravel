@@ -85,64 +85,79 @@
                 <x-wirekit::heading :level="$heading ? 3 : 2" size="lg">{{ $lang->get('sanctum-hardening::messages.screen.parts.tokens') }}</x-wirekit::heading>
             </x-wirekit::card.header>
             <x-wirekit::card.body>
-                {{-- No tableLabel: the section is the screen's landmark and carries its name, and a table named the same would
-                     be a second landmark under that name. WireKit keeps the table's scroller reachable by keyboard without one. --}}
-                <x-wirekit::table>
-                    <x-wirekit::table.head>
-                        <x-wirekit::table.row>
-                            <x-wirekit::table.th>{{ $lang->get('sanctum-hardening::messages.screen.name') }}</x-wirekit::table.th>
-                            <x-wirekit::table.th>{{ $lang->get('sanctum-hardening::messages.screen.prefix') }}</x-wirekit::table.th>
-                            <x-wirekit::table.th>{{ $lang->get('sanctum-hardening::messages.screen.abilities') }}</x-wirekit::table.th>
-                            <x-wirekit::table.th>{{ $lang->get('sanctum-hardening::messages.screen.expires') }}</x-wirekit::table.th>
-                            <x-wirekit::table.th>{{ $lang->get('sanctum-hardening::messages.screen.last_used') }}</x-wirekit::table.th>
-                            <x-wirekit::table.th><span class="sr-only">{{ $lang->get('sanctum-hardening::messages.screen.revoke') }}</span></x-wirekit::table.th>
-                        </x-wirekit::table.row>
-                    </x-wirekit::table.head>
-                    <x-wirekit::table.body>
-                        @forelse ($tokens as $token)
-                            <x-wirekit::table.row wire:key="token-{{ $token->getKey() }}">
-                                <x-wirekit::table.td>{{ $token->getAttribute('name') }}</x-wirekit::table.td>
-                                <x-wirekit::table.td><x-wirekit::code>{{ $prefixes[$token->getKey()] ?? '' }}</x-wirekit::code></x-wirekit::table.td>
-                                <x-wirekit::table.td>
-                                    {{ implode(', ', array_map(static fn (mixed $ability): string => is_string($ability) ? ($grantable[$ability] ?? $ability) : '', (array) $token->getAttribute('abilities'))) }}
-                                    @if (($limits[(string) $token->getKey()] ?? []) !== [])
-                                        <x-wirekit::text size="sm" intent="muted" leading="tight" break="anywhere">{{ $lang->get('sanctum-hardening::messages.screen.only_from', ['networks' => implode(', ', $limits[(string) $token->getKey()])]) }}</x-wirekit::text>
-                                    @endif
-                                </x-wirekit::table.td>
-                                {{-- A date or a moment on one line: broken over two it reads as two values. --}}
-                                <x-wirekit::table.td>
-                                    <span class="whitespace-nowrap">{{ $token->getAttribute('expires_at')?->locale($lang->getLocale())->isoFormat($lang->get('sanctum-hardening::messages.screen.formats.date')) ?? $lang->get('sanctum-hardening::messages.screen.never') }}</span>
-                                    @isset ($replacedUntil[(string) $token->getKey()])
-                                        {{-- Replaced by a rotation: the old key works until the overlap has passed, to the hour. --}}
-                                        <x-wirekit::text size="sm" intent="muted" leading="tight" class="whitespace-nowrap">{{ $lang->get('sanctum-hardening::messages.screen.replaced_until', ['date' => \Illuminate\Support\Carbon::instance($replacedUntil[(string) $token->getKey()])->locale($lang->getLocale())->isoFormat($lang->get('sanctum-hardening::messages.screen.formats.moment'))]) }}</x-wirekit::text>
-                                    @endisset
-                                </x-wirekit::table.td>
-                                <x-wirekit::table.td>
-                                    {{-- Where Sanctum writes no last use, the column says it is not recorded rather than "Never". --}}
-                                    <span class="whitespace-nowrap">{{ $lastUseRecorded ? ($token->getAttribute('last_used_at')?->locale($lang->getLocale())->isoFormat($lang->get('sanctum-hardening::messages.screen.formats.moment')) ?? $lang->get('sanctum-hardening::messages.screen.never')) : $lang->get('sanctum-hardening::messages.screen.not_recorded') }}</span>
-                                    @if (($uses[(string) $token->getKey()] ?? []) !== [])
-                                        <x-wirekit::list type="none" :items="$uses[(string) $token->getKey()]" :aria-label="$lang->get('sanctum-hardening::messages.screen.recent')" />
-                                    @endif
-                                </x-wirekit::table.td>
-                                <x-wirekit::table.td>
-                                    @if (in_array((string) $token->getKey(), $rotatable, true))
-                                        <x-wirekit::button type="button" wire:click="rotate('{{ $token->getKey() }}')" wire:confirm="{{ $lang->get('sanctum-hardening::messages.screen.confirm_rotate', ['hours' => $overlapHours]) }}" aria-label="{{ $lang->get('sanctum-hardening::messages.screen.rotate_named', ['name' => $token->getAttribute('name')]) }}" data-sanctum-hardening-rotate="{{ $token->getKey() }}">
-                                            {{ $lang->get('sanctum-hardening::messages.screen.rotate') }}
-                                        </x-wirekit::button>
-                                    @endif
-                                    {{-- Marked with its token: once a token is revoked, the focus moves to the button of the one beside it. --}}
-                                    <x-wirekit::button type="button" intent="danger" wire:click="revoke('{{ $token->getKey() }}')" wire:confirm="{{ $lang->get('sanctum-hardening::messages.screen.confirm_revoke') }}" aria-label="{{ $lang->get('sanctum-hardening::messages.screen.revoke_named', ['name' => $token->getAttribute('name')]) }}" data-sanctum-hardening-revoke="{{ $token->getKey() }}">
-                                        {{ $lang->get('sanctum-hardening::messages.screen.revoke') }}
-                                    </x-wirekit::button>
-                                </x-wirekit::table.td>
-                            </x-wirekit::table.row>
-                        @empty
+                <x-wirekit::stack>
+                    @if ($overlaps !== [] && $rotatable !== [])
+                        {{-- How long a token a rotation replaces keeps working, chosen before the rotation. Live, so the question of
+                             each rotate button names the overlap chosen. --}}
+                        <x-wirekit::select wire:model.live="overlap" name="overlap" :label="$lang->get('sanctum-hardening::messages.screen.overlap')">
+                            <option value="">{{ $duration($defaultOverlap) }}</option>
+                            @foreach ($overlaps as $hours)
+                                <option value="{{ $hours }}">{{ $duration($hours) }}</option>
+                            @endforeach
+                        </x-wirekit::select>
+                    @endif
+
+                    {{-- No tableLabel: the section is the screen's landmark and carries its name, and a table named the same would
+                         be a second landmark under that name. WireKit keeps the table's scroller reachable by keyboard without one. --}}
+                    <x-wirekit::table>
+                        <x-wirekit::table.head>
                             <x-wirekit::table.row>
-                                <x-wirekit::table.td colspan="6">{{ $holder ? $lang->get('sanctum-hardening::messages.screen.holder.none') : $lang->get('sanctum-hardening::messages.screen.none') }}</x-wirekit::table.td>
+                                <x-wirekit::table.th>{{ $lang->get('sanctum-hardening::messages.screen.name') }}</x-wirekit::table.th>
+                                <x-wirekit::table.th>{{ $lang->get('sanctum-hardening::messages.screen.prefix') }}</x-wirekit::table.th>
+                                <x-wirekit::table.th>{{ $lang->get('sanctum-hardening::messages.screen.abilities') }}</x-wirekit::table.th>
+                                <x-wirekit::table.th>{{ $lang->get('sanctum-hardening::messages.screen.expires') }}</x-wirekit::table.th>
+                                <x-wirekit::table.th>{{ $lang->get('sanctum-hardening::messages.screen.last_used') }}</x-wirekit::table.th>
+                                <x-wirekit::table.th><span class="sr-only">{{ $lang->get('sanctum-hardening::messages.screen.revoke') }}</span></x-wirekit::table.th>
                             </x-wirekit::table.row>
-                        @endforelse
-                    </x-wirekit::table.body>
-                </x-wirekit::table>
+                        </x-wirekit::table.head>
+                        <x-wirekit::table.body>
+                            @forelse ($tokens as $token)
+                                <x-wirekit::table.row wire:key="token-{{ $token->getKey() }}">
+                                    <x-wirekit::table.td>{{ $token->getAttribute('name') }}</x-wirekit::table.td>
+                                    <x-wirekit::table.td><x-wirekit::code>{{ $prefixes[$token->getKey()] ?? '' }}</x-wirekit::code></x-wirekit::table.td>
+                                    <x-wirekit::table.td>
+                                        {{ implode(', ', array_map(static fn (mixed $ability): string => is_string($ability) ? ($grantable[$ability] ?? $ability) : '', (array) $token->getAttribute('abilities'))) }}
+                                        @if (($limits[(string) $token->getKey()] ?? []) !== [])
+                                            <x-wirekit::text size="sm" intent="muted" leading="tight" break="anywhere">{{ $lang->get('sanctum-hardening::messages.screen.only_from', ['networks' => implode(', ', $limits[(string) $token->getKey()])]) }}</x-wirekit::text>
+                                        @endif
+                                    </x-wirekit::table.td>
+                                    {{-- A date or a moment on one line: broken over two it reads as two values. --}}
+                                    <x-wirekit::table.td>
+                                        <span class="whitespace-nowrap">{{ $token->getAttribute('expires_at')?->locale($lang->getLocale())->isoFormat($lang->get('sanctum-hardening::messages.screen.formats.date')) ?? $lang->get('sanctum-hardening::messages.screen.never') }}</span>
+                                        @isset ($replacedUntil[(string) $token->getKey()])
+                                            {{-- Replaced by a rotation: the old key works until the overlap has passed, to the hour. --}}
+                                            <x-wirekit::text size="sm" intent="muted" leading="tight" class="whitespace-nowrap">{{ $lang->get('sanctum-hardening::messages.screen.replaced_until', ['date' => \Illuminate\Support\Carbon::instance($replacedUntil[(string) $token->getKey()])->locale($lang->getLocale())->isoFormat($lang->get('sanctum-hardening::messages.screen.formats.moment'))]) }}</x-wirekit::text>
+                                        @endisset
+                                    </x-wirekit::table.td>
+                                    <x-wirekit::table.td>
+                                        {{-- Where Sanctum writes no last use, the column says it is not recorded rather than "Never". --}}
+                                        <span class="whitespace-nowrap">{{ $lastUseRecorded ? ($token->getAttribute('last_used_at')?->locale($lang->getLocale())->isoFormat($lang->get('sanctum-hardening::messages.screen.formats.moment')) ?? $lang->get('sanctum-hardening::messages.screen.never')) : $lang->get('sanctum-hardening::messages.screen.not_recorded') }}</span>
+                                        @if (($uses[(string) $token->getKey()] ?? []) !== [])
+                                            <x-wirekit::list type="none" :items="$uses[(string) $token->getKey()]" :aria-label="$lang->get('sanctum-hardening::messages.screen.recent')" />
+                                        @endif
+                                    </x-wirekit::table.td>
+                                    <x-wirekit::table.td>
+                                        @if (in_array((string) $token->getKey(), $rotatable, true))
+                                            {{-- wire:confirm keeps the question the button was drawn with, so the button is keyed by the
+                                                 overlap and drawn anew once another one is chosen. --}}
+                                            <x-wirekit::button type="button" wire:key="rotate-{{ $token->getKey() }}-{{ $overlapHours }}" wire:click="rotate('{{ $token->getKey() }}')" wire:confirm="{{ $lang->get('sanctum-hardening::messages.screen.confirm_rotate', ['hours' => $overlapHours, 'overlap' => $duration($overlapHours)]) }}" aria-label="{{ $lang->get('sanctum-hardening::messages.screen.rotate_named', ['name' => $token->getAttribute('name')]) }}" data-sanctum-hardening-rotate="{{ $token->getKey() }}">
+                                                {{ $lang->get('sanctum-hardening::messages.screen.rotate') }}
+                                            </x-wirekit::button>
+                                        @endif
+                                        {{-- Marked with its token: once a token is revoked, the focus moves to the button of the one beside it. --}}
+                                        <x-wirekit::button type="button" intent="danger" wire:click="revoke('{{ $token->getKey() }}')" wire:confirm="{{ $lang->get('sanctum-hardening::messages.screen.confirm_revoke') }}" aria-label="{{ $lang->get('sanctum-hardening::messages.screen.revoke_named', ['name' => $token->getAttribute('name')]) }}" data-sanctum-hardening-revoke="{{ $token->getKey() }}">
+                                            {{ $lang->get('sanctum-hardening::messages.screen.revoke') }}
+                                        </x-wirekit::button>
+                                    </x-wirekit::table.td>
+                                </x-wirekit::table.row>
+                            @empty
+                                <x-wirekit::table.row>
+                                    <x-wirekit::table.td colspan="6">{{ $holder ? $lang->get('sanctum-hardening::messages.screen.holder.none') : $lang->get('sanctum-hardening::messages.screen.none') }}</x-wirekit::table.td>
+                                </x-wirekit::table.row>
+                            @endforelse
+                        </x-wirekit::table.body>
+                    </x-wirekit::table>
+                </x-wirekit::stack>
             </x-wirekit::card.body>
         </x-wirekit::card>
 
@@ -157,7 +172,10 @@
                 {{-- A stack, so the two sentences and the example keep the screen's spacing apart. --}}
                 <x-wirekit::stack gap="sm">
                     <x-wirekit::text>{{ $lang->get('sanctum-hardening::messages.screen.quickstart_endpoint') }} <x-wirekit::code>{{ $endpoint }}</x-wirekit::code>.</x-wirekit::text>
-                    <x-wirekit::text>{{ $holder ? $lang->get('sanctum-hardening::messages.screen.holder.quickstart_limits', ['token' => $perToken, 'user' => $perUser]) : $lang->get('sanctum-hardening::messages.screen.quickstart_limits', ['token' => $perToken, 'user' => $perUser]) }}</x-wirekit::text>
+                    {{-- The sentence on the limits, with a part left out where the application names no limit for it. --}}
+                    @if ($quickstartLimits !== null)
+                        <x-wirekit::text>{{ $quickstartLimits }}</x-wirekit::text>
+                    @endif
                     <x-wirekit::code-block language="bash">curl -H "Authorization: Bearer &lt;token&gt;" {{ $endpoint }}</x-wirekit::code-block>
                 </x-wirekit::stack>
             </x-wirekit::card.body>

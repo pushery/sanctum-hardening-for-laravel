@@ -26,7 +26,9 @@ return [
         'not_revoked' => 'No token was revoked.',
         'rotate' => 'Rotate',
         'rotate_named' => 'Rotate :name',
-        'confirm_rotate' => 'Replace this token with a new one? It keeps working for :hours hours, so whatever uses it has time to take the new one.',
+        'confirm_rotate' => 'Replace this token with a new one? It keeps working for :overlap, so whatever uses it has time to take the new one.',
+        'overlap' => 'After a rotation, the old token keeps working for',
+        'hours' => ':count hour|:count hours',
         'rotated' => 'A new token replaces it. The old one keeps working until the time shown beside it.',
         'not_rotated' => 'No token was replaced.',
         'replaced_until' => 'Replaced, works until :date',
@@ -50,6 +52,8 @@ return [
         'quickstart' => 'Quickstart',
         'quickstart_endpoint' => 'Send a request with the token to',
         'quickstart_limits' => 'Each token makes up to :token requests a minute, and an account up to :user over all of its tokens.',
+        'quickstart_token_limit' => 'Each token makes up to :token requests a minute.',
+        'quickstart_user_limit' => 'An account makes up to :user requests a minute over all of its tokens.',
         // The parts of the screen, each with its name and one sentence on what it is for, as the WireKit view heads the
         // card each part stands in. The quickstart takes its name from `quickstart` above.
         'parts' => [
@@ -72,6 +76,7 @@ return [
             'intro' => 'A token can do what its abilities name and never more than the holder it belongs to.',
             'none' => 'No tokens yet.',
             'quickstart_limits' => 'Each token makes up to :token requests a minute, and the tokens of this holder up to :user together.',
+            'quickstart_user_limit' => 'The tokens of this holder make up to :user requests a minute together.',
             'refused' => [
                 'not_tokenable' => 'Tokens cannot be created for this holder.',
                 'limit_reached' => 'This holder has as many tokens as allowed. Revoke one first.',
@@ -91,6 +96,7 @@ return [
             'too_fast' => 'Tokens are being created too fast. Try again in a moment.',
             'limit_reached' => 'You hold as many tokens as allowed. Revoke one first.',
             'lifetime' => 'This lifetime is not offered.',
+            'overlap' => 'Choose from the list how long the old token keeps working.',
             'name' => 'Give the token a name of at most 255 characters.',
             'network' => 'A token cannot be limited to ":network": it is no address and no network.',
             'too_many_networks' => 'A token can be limited to at most :limit addresses and networks.',

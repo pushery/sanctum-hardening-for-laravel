@@ -120,8 +120,9 @@ return [
     |--------------------------------------------------------------------------
     | Sanctum asks the guards in `sanctum.guard` for a signed-in user before it reads a bearer
     | token, and its own default is `web`. On a route without a session, as in the `api` group,
-    | the web guard takes a raw remember cookie for a login, so whoever can read a user's
-    | `remember_token` reaches the API with every ability and without the application key. The
+    | the web guard takes a raw remember cookie for a login, so whoever can read a user's row,
+    | its `remember_token` and its password hash, reaches the API with every ability and without
+    | the application key. The
     | package sets `sanctum.guard` to this list, and a `guard` in `config/sanctum.php` has no
     | effect. Empty, only a bearer token signs in. Name a guard, `['web']` for one, where a
     | single-page client signs in over the session through Sanctum's `statefulApi()`.
@@ -192,11 +193,17 @@ return [
     | lifetime, and ends the old token `overlap_hours` hours later, so whatever still calls with
     | the old key has that long to take the new one. The expiry alert names the end before it
     | comes, as it does for any token about to expire.
+    |
+    | `overlaps` lists other overlaps, in hours, the self-service screen offers for a rotation,
+    | [1, 24, 168] for an hour, a day or a week. The screen then offers them beside
+    | `overlap_hours`, which stays preselected for every rotation, and refuses an overlap it did
+    | not offer. Empty, the screen rotates with `overlap_hours` alone.
     */
     'rotation' => [
         'overlap_hours' => is_numeric($overlapHours = env('SANCTUM_HARDENING_ROTATION_OVERLAP_HOURS')) && (int) $overlapHours >= 1
             ? (int) $overlapHours
             : 24,
+        'overlaps' => [],
     ],
 
     /*

@@ -83,6 +83,20 @@
         </div>
     @endif
 
+    @if ($overlaps !== [] && $rotatable !== [])
+        {{-- How long a token a rotation replaces keeps working, chosen before the rotation. Live, so the question of each
+             rotate button names the overlap chosen, and `.number` sends the default's option, which has no value, as null. --}}
+        <div>
+            <label for="{{ $domId('token-overlap') }}">{{ $lang->get('sanctum-hardening::messages.screen.overlap') }}</label>
+            <select id="{{ $domId('token-overlap') }}" name="overlap" wire:model.live.number="overlap">
+                <option value="">{{ $duration($defaultOverlap) }}</option>
+                @foreach ($overlaps as $hours)
+                    <option value="{{ $hours }}">{{ $duration($hours) }}</option>
+                @endforeach
+            </select>
+        </div>
+    @endif
+
     {{-- Six columns are wider than a phone. The list scrolls sideways in an area of its own, which a keyboard
          reaches, rather than widening the page around it (WCAG 1.4.10 Reflow). The area is no landmark: the section
          is the screen's landmark and carries its name, and a second one under that name would only repeat it. --}}
@@ -129,7 +143,9 @@
                         </td>
                         <td>
                             @if (in_array((string) $token->getKey(), $rotatable, true))
-                                <button type="button" wire:click="rotate('{{ $token->getKey() }}')" wire:confirm="{{ $lang->get('sanctum-hardening::messages.screen.confirm_rotate', ['hours' => $overlapHours]) }}" aria-label="{{ $lang->get('sanctum-hardening::messages.screen.rotate_named', ['name' => $token->getAttribute('name')]) }}" data-sanctum-hardening-rotate="{{ $token->getKey() }}">
+                                {{-- wire:confirm keeps the question the button was drawn with, so the button is keyed by the overlap and
+                                     drawn anew once another one is chosen. --}}
+                                <button type="button" wire:key="rotate-{{ $token->getKey() }}-{{ $overlapHours }}" wire:click="rotate('{{ $token->getKey() }}')" wire:confirm="{{ $lang->get('sanctum-hardening::messages.screen.confirm_rotate', ['hours' => $overlapHours, 'overlap' => $duration($overlapHours)]) }}" aria-label="{{ $lang->get('sanctum-hardening::messages.screen.rotate_named', ['name' => $token->getAttribute('name')]) }}" data-sanctum-hardening-rotate="{{ $token->getKey() }}">
                                     {{ $lang->get('sanctum-hardening::messages.screen.rotate') }}
                                 </button>
                             @endif
@@ -157,7 +173,10 @@
             <h2 id="{{ $domId('quickstart-heading') }}">{{ $lang->get('sanctum-hardening::messages.screen.quickstart') }}</h2>
         @endif
         <p>{{ $lang->get('sanctum-hardening::messages.screen.quickstart_endpoint') }} <code>{{ $endpoint }}</code>.</p>
-        <p>{{ $holder ? $lang->get('sanctum-hardening::messages.screen.holder.quickstart_limits', ['token' => $perToken, 'user' => $perUser]) : $lang->get('sanctum-hardening::messages.screen.quickstart_limits', ['token' => $perToken, 'user' => $perUser]) }}</p>
+        {{-- The sentence on the limits, with a part left out where the application names no limit for it. --}}
+        @if ($quickstartLimits !== null)
+            <p>{{ $quickstartLimits }}</p>
+        @endif
         {{-- Wrapped at its spaces rather than run past the edge: the request is wider than a phone. --}}
         <pre style="white-space: pre-wrap; overflow-wrap: anywhere;"><code>curl -H "Authorization: Bearer &lt;token&gt;" {{ $endpoint }}</code></pre>
     </div>

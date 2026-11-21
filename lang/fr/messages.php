@@ -26,7 +26,9 @@ return [
         'not_revoked' => 'Aucun jeton n’a été révoqué.',
         'rotate' => 'Renouveler',
         'rotate_named' => 'Renouveler :name',
-        'confirm_rotate' => 'Remplacer ce jeton par un nouveau ? Il fonctionne encore :hours heures, le temps que ce qui l’utilise passe au nouveau.',
+        'confirm_rotate' => 'Remplacer ce jeton par un nouveau ? Il fonctionne encore :overlap, le temps que ce qui l’utilise passe au nouveau.',
+        'overlap' => 'Après le renouvellement, l’ancien jeton fonctionne encore',
+        'hours' => ':count heure|:count heures',
         'rotated' => 'Un nouveau jeton le remplace. L’ancien fonctionne jusqu’à l’heure indiquée à côté.',
         'not_rotated' => 'Aucun jeton n’a été remplacé.',
         'replaced_until' => 'Remplacé, fonctionne jusqu’au :date',
@@ -49,6 +51,8 @@ return [
         'quickstart' => 'Démarrage rapide',
         'quickstart_endpoint' => 'Envoie une requête avec le jeton à',
         'quickstart_limits' => 'Chaque jeton fait jusqu’à :token requêtes par minute, et un compte jusqu’à :user avec tous ses jetons.',
+        'quickstart_token_limit' => 'Chaque jeton fait jusqu’à :token requêtes par minute.',
+        'quickstart_user_limit' => 'Un compte fait jusqu’à :user requêtes par minute avec tous ses jetons.',
         // The parts of the screen, each with its name and one sentence on what it is for, as the WireKit view heads the
         // card each part stands in. The quickstart takes its name from `quickstart` above.
         'parts' => [
@@ -71,6 +75,7 @@ return [
             'intro' => 'Un jeton peut ce que nomment ses capacités, et jamais plus que le titulaire auquel il appartient.',
             'none' => 'Aucun jeton pour l’instant.',
             'quickstart_limits' => 'Chaque jeton fait jusqu’à :token requêtes par minute, et les jetons de ce titulaire jusqu’à :user ensemble.',
+            'quickstart_user_limit' => 'Les jetons de ce titulaire font jusqu’à :user requêtes par minute ensemble.',
             'refused' => [
                 'not_tokenable' => 'Aucun jeton ne peut être créé pour ce titulaire.',
                 'limit_reached' => 'Ce titulaire a autant de jetons que permis. Révoques-en un d’abord.',
@@ -90,6 +95,7 @@ return [
             'too_fast' => 'Les jetons sont créés trop vite. Réessaie dans un instant.',
             'limit_reached' => 'Tu as autant de jetons que permis. Révoques-en un d’abord.',
             'lifetime' => 'Cette durée n’est pas proposée.',
+            'overlap' => 'Choisis dans la liste combien de temps l’ancien jeton fonctionne encore.',
             'name' => 'Donne au jeton un nom de 255 caractères au plus.',
             'network' => 'Un jeton ne peut pas être limité à « :network » : ce n’est ni une adresse ni un réseau.',
             'too_many_networks' => 'Un jeton peut être limité à :limit adresses et réseaux au plus.',

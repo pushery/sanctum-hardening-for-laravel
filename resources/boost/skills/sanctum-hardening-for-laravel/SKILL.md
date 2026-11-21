@@ -29,6 +29,8 @@ not set it up: `php artisan install:api` creates Sanctum's `personal_access_toke
 a mint is refused for it:
 
 ```php
+namespace App\Models;
+
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Laravel\Sanctum\HasApiTokens;
 
@@ -134,7 +136,9 @@ the route cache still holds answers `404` then.
 
 An application with Livewire embeds the self-service screen, `<livewire:sanctum-hardening.tokens />`, on a
 page behind `auth` and `password.confirm`. On a page with a header of its own, pass `:heading="false"`, which
-leaves out the screen's own heading and the sentence under it.
+leaves out the screen's own heading and the sentence under it. Where the API runs behind a limiter of the
+application's own, bind a `ResolvesQuickstartLimits` that gives that limiter's limits for the screen's holder, so
+the quickstart of the screen names them; a null leaves its part of the sentence out.
 
 Run `php artisan sanctum-hardening:doctor` after installing: it names the tokens that already carry
 the wildcard or an ability the catalog does not know, each daily command of the package that nothing

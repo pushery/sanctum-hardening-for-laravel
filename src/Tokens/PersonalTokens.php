@@ -141,10 +141,40 @@ final readonly class PersonalTokens
         );
 
         $by = $request->user();
-        $hours = max(1, $overlapHours ?? $this->positive('rotation.overlap_hours', 24));
+        $hours = max(1, $overlapHours ?? $this->defaultOverlap());
         $this->rotations->record($token, $successor->accessToken, Date::now()->addHours($hours), $by instanceof Model ? $by : null);
 
         return $successor;
+    }
+
+    /**
+     * The overlap of a rotation that names none, in hours: `rotation.overlap_hours`.
+     */
+    public function defaultOverlap(): int
+    {
+        return $this->positive('rotation.overlap_hours', 24);
+    }
+
+    /**
+     * The overlaps a rotation on the screen may be given, in hours, the shortest first: the ones in `rotation.overlaps`
+     * and the default one. Empty where the list names none, and the screen then offers no choice.
+     *
+     * @return list<int>
+     */
+    public function overlaps(): array
+    {
+        $configured = $this->config->get('sanctum-hardening.rotation.overlaps', []);
+        $overlaps = array_filter(array_filter(is_array($configured) ? $configured : [], is_int(...)), static fn (int $hours): bool => $hours >= 1);
+
+        if ($overlaps === []) {
+            return [];
+        }
+
+        $overlaps[] = $this->defaultOverlap();
+        $overlaps = array_values(array_unique($overlaps));
+        sort($overlaps);
+
+        return $overlaps;
     }
 
     /**
