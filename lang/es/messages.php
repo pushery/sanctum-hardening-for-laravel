@@ -26,7 +26,9 @@ return [
         'not_revoked' => 'No se ha revocado ningún token.',
         'rotate' => 'Renovar',
         'rotate_named' => 'Renovar :name',
-        'confirm_rotate' => '¿Sustituir este token por uno nuevo? Seguirá funcionando :hours horas para que lo que lo usa pueda pasar al nuevo.',
+        'confirm_rotate' => '¿Sustituir este token por uno nuevo? Seguirá funcionando :overlap para que lo que lo usa pueda pasar al nuevo.',
+        'overlap' => 'Tras renovarlo, el token antiguo sigue funcionando durante',
+        'hours' => ':count hora|:count horas',
         'rotated' => 'Un token nuevo lo sustituye. El antiguo sigue funcionando hasta la hora indicada a su lado.',
         'not_rotated' => 'No se ha sustituido ningún token.',
         'replaced_until' => 'Sustituido, funciona hasta :date',
@@ -49,6 +51,8 @@ return [
         'quickstart' => 'Inicio rápido',
         'quickstart_endpoint' => 'Envía una solicitud con el token a',
         'quickstart_limits' => 'Cada token hace hasta :token solicitudes por minuto, y una cuenta hasta :user con todos sus tokens.',
+        'quickstart_token_limit' => 'Cada token hace hasta :token solicitudes por minuto.',
+        'quickstart_user_limit' => 'Una cuenta hace hasta :user solicitudes por minuto con todos sus tokens.',
         // The parts of the screen, each with its name and one sentence on what it is for, as the WireKit view heads the
         // card each part stands in. The quickstart takes its name from `quickstart` above.
         'parts' => [
@@ -71,6 +75,7 @@ return [
             'intro' => 'Un token puede lo que nombran sus capacidades y nunca más que el titular al que pertenece.',
             'none' => 'Todavía no hay tokens.',
             'quickstart_limits' => 'Cada token hace hasta :token solicitudes por minuto, y los tokens de este titular hasta :user en conjunto.',
+            'quickstart_user_limit' => 'Los tokens de este titular hacen hasta :user solicitudes por minuto en conjunto.',
             'refused' => [
                 'not_tokenable' => 'No se pueden crear tokens para este titular.',
                 'limit_reached' => 'Este titular tiene tantos tokens como se permite. Revoca uno primero.',
@@ -90,6 +95,7 @@ return [
             'too_fast' => 'Se están creando tokens demasiado rápido. Vuelve a intentarlo en un momento.',
             'limit_reached' => 'Tienes tantos tokens como se permite. Revoca uno primero.',
             'lifetime' => 'Esta duración no se ofrece.',
+            'overlap' => 'Elige de la lista cuánto tiempo sigue funcionando el token antiguo.',
             'name' => 'Dale al token un nombre de 255 caracteres como máximo.',
             'network' => 'Un token no se puede limitar a «:network»: no es una dirección ni una red.',
             'too_many_networks' => 'Un token se puede limitar a :limit direcciones y redes como máximo.',

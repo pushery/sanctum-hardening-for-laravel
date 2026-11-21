@@ -6,117 +6,173 @@ namespace Pushery\SanctumHardening\Support;
 
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\ConnectionResolverInterface;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 
 /**
- * Deletes the package's expired keys from a database cache store.
+ * Deletes the expired entries this package keeps in a database or a file cache store.
  *
- * A database store deletes the row of an expired key only when that key is read again, and the package writes keys that
- * nobody reads again: the mark of every password confirmation a mint spent, the mark that holds back a second record of
- * the same use of a token, the count of mints of a holder who mints no more, and the count of wrong passwords of a user
- * who stops trying. On a database store their rows stay for good. Scheduled once a day, this deletes them, a thousand
- * rows to a statement:
+ * Both stores delete an expired entry only when its key is read again. A key written for one
+ * request, one visitor or one record is rarely read again once that has passed, so on these stores
+ * it stays for good: a row in the table of a database store, a file under the directory of a file
+ * store. Scheduled once a day, this deletes them, the rows a thousand to a statement:
  *
  *     Schedule::call(PruneExpiredCacheKeys::class)->daily();
  *
- * It prunes the stores the package keeps its keys in, the default store and the store Laravel's rate limiter counts in,
- * `cache.limiter`, each of them once, and does nothing where neither is a database store. Only the row of a key that has
- * expired goes, and the store already treats such a row as missing.
+ * It prunes the default store and the store of the rate limiter, `cache.limiter`, each once, and
+ * does nothing for a store that is neither a database nor a file store. In a database store only
+ * the keys of this package go, those under `sanctum-hardening:`, and only once they have expired, when
+ * the store already treats them as missing. A file store names a file by the hash of its key, so
+ * there the expired file of any key goes, which the store already treats as missing too.
+ *
+ * Part of the public API, because a host schedules it in its own scheduler.
  */
 final readonly class PruneExpiredCacheKeys
 {
     /** The most rows one statement deletes, so a large table is pruned in short statements. */
     private const int CHUNK = 1000;
 
-    /** What every cache key of the package starts with. */
-    private const string KEYS = 'sanctum-hardening:';
-
     public function __construct(
         private Repository $config,
         private ConnectionResolverInterface $connections,
     ) {}
 
-    /** Delete every expired key of the package, and return how many rows went. */
+    /** Delete every expired entry of this package, and return how many rows or files went. */
     public function __invoke(): int
     {
-        $now = Carbon::now()->getTimestamp();
         $deleted = 0;
 
         foreach ($this->stores() as $store) {
-            $connection = $this->connections->connection($store['connection']);
+            if ($store['driver'] === 'file') {
+                $deleted += $this->pruneFiles($store['path']);
 
-            do {
-                $chunk = $connection->table($store['table'])
-                    ->where('key', 'like', $store['pattern'])
-                    ->where('expiration', '<=', $now)
-                    ->limit(self::CHUNK)
-                    ->delete();
+                continue;
+            }
 
-                $deleted += $chunk;
-            } while ($chunk === self::CHUNK);
+            $deleted += $this->pruneRows($store['connection'], $store['table'], $store['prefix']);
         }
 
         return $deleted;
     }
 
     /**
-     * The database stores the package keeps its keys in, each once: the default store, and the store Laravel's rate
-     * limiter counts in, which is the default one where `cache.limiter` names none.
+     * The stores pruning reaches, among the default store and the store of the rate limiter, each
+     * once: two names of one table, or a limiter left to the default store, are pruned once.
      *
-     * @return list<array{table: string, connection: ?string, pattern: string}>
+     * @return list<array{driver: 'database', table: string, connection: ?string, prefix: string}|array{driver: 'file', path: string}>
      */
     private function stores(): array
     {
         $stores = [];
 
-        foreach ([$this->config->get('cache.default'), $this->config->get('cache.limiter')] as $name) {
-            $store = $this->databaseStore($name);
+        foreach (['cache.default', 'cache.limiter'] as $key) {
+            $name = $this->config->get($key);
+            $store = is_string($name) && $name !== '' ? $this->store($name) : null;
 
-            if ($store === null) {
-                continue;
+            if ($store !== null && ! in_array($store, $stores, true)) {
+                $stores[] = $store;
             }
-
-            $stores[($store['connection'] ?? '').'|'.$store['table'].'|'.$store['pattern']] = $store;
         }
 
-        return array_values($stores);
+        return $stores;
     }
 
     /**
-     * What pruning a store takes, its table, its connection and the package's keys in it as a LIKE pattern, or null for a
-     * store that is no database store.
+     * What pruning a store takes: for a database store its table, its connection and its key
+     * prefix, as Laravel builds the store, for a file store its directory, and null for a store of
+     * any other driver, a name no store is configured under, and a store without a table or a
+     * directory.
      *
-     * A character of the store's prefix that LIKE reads as more than itself on one of the engines, `%`, `\` and `[`,
-     * stands as `_`, any one character, so the pattern means the same on every engine without an escape clause. It can
-     * then match a key beside the package's, and so can a LIKE that ignores case, as SQLite's does and MySQL's under its
-     * default collation. Such a key goes only once it has expired, and the store already treats it as missing then.
-     *
-     * @param  mixed  $configured  the store as the configuration names it, which a host may write as any type
-     * @return array{table: string, connection: ?string, pattern: string}|null
+     * @return array{driver: 'database', table: string, connection: ?string, prefix: string}|array{driver: 'file', path: string}|null
      */
-    private function databaseStore(mixed $configured): ?array
+    private function store(string $name): ?array
     {
-        $name = is_string($configured) && $configured !== '' ? $configured : $this->config->get('cache.default');
         $stores = $this->config->get('cache.stores');
-        $store = is_array($stores) && is_string($name) ? ($stores[$name] ?? null) : null;
+        $store = is_array($stores) ? ($stores[$name] ?? null) : null;
 
-        if (! is_array($store) || ($store['driver'] ?? null) !== 'database') {
+        if (! is_array($store)) {
             return null;
+        }
+
+        $driver = $store['driver'] ?? null;
+
+        if ($driver === 'file') {
+            $path = $store['path'] ?? null;
+
+            return is_string($path) && $path !== '' ? ['driver' => 'file', 'path' => rtrim($path, '/')] : null;
         }
 
         $table = $store['table'] ?? null;
-        $connection = $store['connection'] ?? null;
-        // As Laravel builds the store: its own prefix, or the one every store shares.
-        $prefix = $store['prefix'] ?? $this->config->get('cache.prefix');
 
-        if (! is_string($table) || $table === '') {
+        if ($driver !== 'database' || ! is_string($table) || $table === '') {
             return null;
         }
 
+        $connection = $store['connection'] ?? null;
+        // Its own prefix, or the one every store shares.
+        $prefix = $store['prefix'] ?? $this->config->get('cache.prefix');
+
         return [
+            'driver' => 'database',
             'table' => $table,
             'connection' => is_string($connection) && $connection !== '' ? $connection : null,
-            'pattern' => str_replace(['%', '\\', '['], '_', is_string($prefix) ? $prefix : '').self::KEYS.'%',
+            'prefix' => is_string($prefix) ? $prefix : '',
         ];
+    }
+
+    /** Delete the expired rows of this package from the table of a database store, and return how many went. */
+    private function pruneRows(?string $connection, string $table, string $prefix): int
+    {
+        $pattern = $this->keysLike($prefix);
+        $now = Date::now()->getTimestamp();
+        $deleted = 0;
+
+        do {
+            $chunk = $this->connections->connection($connection)->table($table)
+                ->where('key', 'like', $pattern)
+                ->where('expiration', '<=', $now)
+                ->limit(self::CHUNK)
+                ->delete();
+
+            $deleted += $chunk;
+        } while ($chunk === self::CHUNK);
+
+        return $deleted;
+    }
+
+    /**
+     * Delete every expired file of a file store, and return how many went.
+     *
+     * The store keeps a key in a file named by its hash, two directories below its own, and writes
+     * the moment it expires as the first ten characters. A key that never expires carries
+     * 9999999999 and stays.
+     */
+    private function pruneFiles(string $directory): int
+    {
+        $now = Date::now()->getTimestamp();
+        $deleted = 0;
+
+        foreach (glob($directory.'/*/*/*', GLOB_NOSORT) ?: [] as $path) {
+            $expiration = is_file($path) ? (string) file_get_contents($path, length: 10) : '';
+
+            if (preg_match('/\A\d{10}\z/', $expiration) === 1 && (int) $expiration <= $now && unlink($path)) {
+                $deleted++;
+            }
+        }
+
+        return $deleted;
+    }
+
+    /**
+     * The keys of this package as a LIKE pattern.
+     *
+     * A character of the prefix that LIKE reads as more than itself on one of the engines, `%`, `\`
+     * and `[`, stands as `_`, any one character, so the pattern means the same on every engine
+     * without an escape clause. It can then match a key beside these, and so can a LIKE that ignores
+     * case, as SQLite's does and MySQL's under its default collation. Such a key goes only once it
+     * has expired, and the store already treats it as missing then.
+     */
+    private function keysLike(string $prefix): string
+    {
+        return str_replace(['%', '\\', '['], '_', $prefix).'sanctum-hardening:%';
     }
 }

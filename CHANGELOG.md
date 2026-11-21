@@ -4,6 +4,26 @@ All notable changes to `pushery/sanctum-hardening-for-laravel` are documented he
 
 A release carries only the sections that have an entry, in this order: `### ⚠️ Breaking`, `### ✨ Added`, `### 🔧 Changed`, `### ⚡ Performance`, `### 🐛 Fixed`, `### 🔒 Security`, `### 🧹 Deprecated`, `### 🗑️ Removed` and `### 📚 Documentation`.
 
+## [0.7.0] - 2026-11-21
+
+### ✨ Added
+
+- **`sanctum-hardening:doctor` names a database or a file store whose expired cache keys nothing prunes.** Where the default store or the store in `cache.limiter` is a database or a file store, which keeps an expired key until it is read again, and no entry of the scheduler calls `PruneExpiredCacheKeys` by its class, the doctor says so and ends with exit code 1. A server that prunes outside the scheduler, or schedules the call under a name of its own, names `prune-cache-keys` with `--scheduled-elsewhere`.
+- **The screen offers a choice of overlap for a rotation.** Where `rotation.overlaps` lists overlaps in hours, `[1, 24, 168]` for an hour, a day or a week, a field above the list of tokens offers them beside `rotation.overlap_hours`, which is preselected for every rotation, and the rotate button asks with the overlap chosen. The screen refuses an overlap it did not offer. Without the list it rotates with `rotation.overlap_hours` as before. The question names the overlap in days where it is whole days, so the default reads as one day rather than as 24 hours; a published copy of the translations that names `:hours` keeps working.
+- **The quickstart of the screen names the limits an application gives it.** It named `throttle.per_token` and `throttle.per_user` on every screen, also where the API runs behind a limiter of the application's own, a plan's for instance, and there it named limits the API does not have. Bind `Pushery\SanctumHardening\Throttling\ResolvesQuickstartLimits`, and the quickstart names what its `limitsFor()` gives for the holder of the screen, the user or a workspace. A null leaves its part of the sentence out, and two nulls leave out the sentence. Unbound, the quickstart names the limits of the package's limiter, as before. A host that published the views takes the sentence from the new `$quickstartLimits`; `$perToken` and `$perUser` still carry the numbers.
+
+### 🔧 Changed
+
+- **`PruneExpiredCacheKeys` clears a file store as well.** Beside the expired rows under `sanctum-hardening:` in a database store, it now deletes the expired files of a file store, which names its files by a hash of the key and so cannot tell the package's from the application's; the store already treats each of them as missing. Redis, Memcached and every other store that expires entries itself stay untouched. The call in the schedule stays `Schedule::call(PruneExpiredCacheKeys::class)->daily();`.
+
+### 🐛 Fixed
+
+- **The quickstart names the limits the limiter counts with.** Where `throttle.per_token` or `throttle.per_user` held no whole number of one or more, the limiter counted with 60 or 120, while the quickstart named the setting as it stood. It names the 60 and the 120 now.
+
+### 📚 Documentation
+
+- **The Boost skill declares its example of the token model in `App\Models`.** The class `User` that uses Sanctum's trait stood in no namespace there, so a copy of it was a global class the application never binds. It now reads as the same example on the documentation's start page.
+
 ## [0.6.0] - 2026-11-20
 
 ### ⚠️ Breaking
@@ -175,7 +195,8 @@ A release carries only the sections that have an entry, in this order: `### ⚠�
 - **The prefixes of deleted tokens are pruned.** `sanctum-hardening:prune-prefixes` forgets the prefix of every token that no longer exists, the ones a query deleted included, as `sanctum:prune-expired` deletes them. Schedule it beside Sanctum's prune.
 - **The last use of a token written once a minute.** Sanctum's write of `last_used_at` on every request goes through once every `last_used_at.every` seconds.
 
-[Unreleased]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.4.0...v0.4.1

@@ -40,22 +40,39 @@ final readonly class TokenThrottle
             : 'address:'.hash_hmac('sha256', $this->counted((string) $request->ip()), $this->secret());
 
         return [
-            $this->limit('per_user', 120, 'burst_per_user')->by('sanctum-hardening:'.$holder)->response($this->tooMany(...)),
+            $this->limit($this->perUser(), 'burst_per_user')->by('sanctum-hardening:'.$holder)->response($this->tooMany(...)),
             // A session or a transient token has no row: its requests count as one token of the holder.
-            $this->limit('per_token', 60, 'burst_per_token')
+            $this->limit($this->perToken(), 'burst_per_token')
                 ->by('sanctum-hardening:'.($token instanceof Model ? 'token:'.TokenPrefixes::key($token->getKey()) : 'session:'.$holder))
                 ->response($this->tooMany(...)),
         ];
     }
 
     /**
-     * A limit of `$rate` requests a minute on average that lets a quiet holder send up to its burst at once: one window
-     * of `burst` requests, as long as `burst / rate` minutes take, to the second. With no burst above the rate, the
-     * window is the minute, as it always was.
+     * The requests a minute each token makes on average: `throttle.per_token`, or 60 where it is no whole number of one
+     * or more.
      */
-    private function limit(string $rate, int $shipped, string $burst): Limit
+    public function perToken(): int
     {
-        $perMinute = $this->positive($rate, $shipped);
+        return $this->positive('per_token', 60);
+    }
+
+    /**
+     * The requests a minute each user makes over all of their tokens on average: `throttle.per_user`, or 120 where it
+     * is no whole number of one or more.
+     */
+    public function perUser(): int
+    {
+        return $this->positive('per_user', 120);
+    }
+
+    /**
+     * A limit of `$perMinute` requests a minute on average that lets a quiet holder send up to its burst at once: one
+     * window of `burst` requests, as long as `burst / rate` minutes take, to the second. With no burst above the rate,
+     * the window is the minute, as it always was.
+     */
+    private function limit(int $perMinute, string $burst): Limit
+    {
         $allowed = $this->config->get('sanctum-hardening.throttle.'.$burst);
 
         if (! is_int($allowed) || $allowed <= $perMinute) {

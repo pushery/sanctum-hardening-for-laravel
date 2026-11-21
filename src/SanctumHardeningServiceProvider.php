@@ -22,6 +22,8 @@ use Pushery\SanctumHardening\Console\PruneUsesCommand;
 use Pushery\SanctumHardening\Console\SendAlertsCommand;
 use Pushery\SanctumHardening\Livewire\TokenManager;
 use Pushery\SanctumHardening\Support\LanguageFallbackLoader;
+use Pushery\SanctumHardening\Throttling\ResolvesQuickstartLimits;
+use Pushery\SanctumHardening\Throttling\ThrottleQuickstartLimits;
 use Pushery\SanctumHardening\Throttling\TokenThrottle;
 use Pushery\SanctumHardening\Tokens\AlertsToTheHolder;
 use Pushery\SanctumHardening\Tokens\LastUsedThrottle;
@@ -72,6 +74,7 @@ final class SanctumHardeningServiceProvider extends ServiceProvider
         $this->app->singleton(AbilityCatalog::class);
         $this->app->bindIf(ResolvesTokenLimit::class, NoTokenLimit::class);
         $this->app->bindIf(ResolvesTokenAlerts::class, AlertsToTheHolder::class);
+        $this->app->bindIf(ResolvesQuickstartLimits::class, ThrottleQuickstartLimits::class);
     }
 
     public function boot(): void

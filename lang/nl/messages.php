@@ -26,7 +26,9 @@ return [
         'not_revoked' => 'Er is geen token ingetrokken.',
         'rotate' => 'Vernieuwen',
         'rotate_named' => ':name vernieuwen',
-        'confirm_rotate' => 'Dit token door een nieuw vervangen? Het werkt nog :hours uur, zodat wat het gebruikt het nieuwe kan overnemen.',
+        'confirm_rotate' => 'Dit token door een nieuw vervangen? Het werkt nog :overlap, zodat wat het gebruikt het nieuwe kan overnemen.',
+        'overlap' => 'Na het vernieuwen werkt het oude token nog',
+        'hours' => ':count uur|:count uur',
         'rotated' => 'Een nieuw token vervangt het. Het oude werkt tot het tijdstip dat ernaast staat.',
         'not_rotated' => 'Er is geen token vervangen.',
         'replaced_until' => 'Vervangen, werkt tot :date',
@@ -49,6 +51,8 @@ return [
         'quickstart' => 'Snelstart',
         'quickstart_endpoint' => 'Stuur een verzoek met het token naar',
         'quickstart_limits' => 'Elk token doet tot :token verzoeken per minuut, en een account tot :user over al zijn tokens.',
+        'quickstart_token_limit' => 'Elk token doet tot :token verzoeken per minuut.',
+        'quickstart_user_limit' => 'Een account doet tot :user verzoeken per minuut over al zijn tokens.',
         // The parts of the screen, each with its name and one sentence on what it is for, as the WireKit view heads the
         // card each part stands in. The quickstart takes its name from `quickstart` above.
         'parts' => [
@@ -71,6 +75,7 @@ return [
             'intro' => 'Een token kan wat zijn bevoegdheden noemen, en nooit meer dan de houder waartoe het behoort.',
             'none' => 'Nog geen tokens.',
             'quickstart_limits' => 'Elk token doet tot :token verzoeken per minuut, en de tokens van deze houder samen tot :user.',
+            'quickstart_user_limit' => 'De tokens van deze houder doen samen tot :user verzoeken per minuut.',
             'refused' => [
                 'not_tokenable' => 'Voor deze houder kunnen geen tokens worden aangemaakt.',
                 'limit_reached' => 'Deze houder heeft zoveel tokens als toegestaan. Trek er eerst een in.',
@@ -90,6 +95,7 @@ return [
             'too_fast' => 'Er worden te snel tokens aangemaakt. Probeer het zo opnieuw.',
             'limit_reached' => 'Je hebt zoveel tokens als toegestaan. Trek er eerst een in.',
             'lifetime' => 'Deze looptijd wordt niet aangeboden.',
+            'overlap' => 'Kies uit de lijst hoe lang het oude token nog werkt.',
             'name' => 'Geef het token een naam van hoogstens 255 tekens.',
             'network' => 'Een token kan niet worden beperkt tot ‘:network’: dat is geen adres en geen netwerk.',
             'too_many_networks' => 'Een token kan worden beperkt tot hoogstens :limit adressen en netwerken.',

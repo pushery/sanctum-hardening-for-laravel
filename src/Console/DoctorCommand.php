@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Pushery\SanctumHardening\Console;
 
 use Illuminate\Console\Command;
+use Illuminate\Console\Scheduling\CallbackEvent;
+use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Routing\Router;
@@ -13,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 use Laravel\Sanctum\Sanctum;
 use Pushery\SanctumHardening\Abilities\AbilityCatalog;
+use Pushery\SanctumHardening\Support\PruneExpiredCacheKeys;
 use Pushery\SanctumHardening\Support\TableLookup;
 use Pushery\SanctumHardening\Tokens\Moments;
 use Pushery\SanctumHardening\Tokens\NetworksCallback;
@@ -46,9 +49,12 @@ final class DoctorCommand extends Command
     /** The commands of the package a host runs daily, by the name `--scheduled-elsewhere` takes. */
     private const array DAILY = ['prune-prefixes', 'prune-revocations', 'prune-uses', 'send-alerts'];
 
+    /** The name `--scheduled-elsewhere` takes for the pruning of expired cache keys, which is a call rather than a command. */
+    private const string PRUNE_CACHE_KEYS = 'prune-cache-keys';
+
     /** @var string */
     protected $signature = 'sanctum-hardening:doctor
-        {--scheduled-elsewhere=* : A daily command of the package that your server runs outside the scheduler, such as prune-uses}';
+        {--scheduled-elsewhere=* : A daily command or prune of the package that your server runs outside the scheduler, such as prune-uses or prune-cache-keys}';
 
     /** @var string */
     protected $description = 'Report the tokens that carry the wildcard or an ability the catalog does not know, limited tokens Sanctum no longer checks, prunes that do not run, and a session guard no route needs';
@@ -57,12 +63,13 @@ final class DoctorCommand extends Command
     {
         $tokens = $this->tokensAreSound($catalog);
         $scheduled = $this->dailyCommandsAreScheduled($schedule, $alerts);
+        $cleared = $this->expiredCacheKeysArePruned($schedule, $config);
         $pruned = $this->nothingOutlivesItsRetention($config);
         $silence = $this->silenceIsKnown($alerts);
         $guards = $this->sessionGuardsAreNeeded($config, $router);
         $this->warnOfAnotherSessionZone();
 
-        return $tokens && $scheduled && $pruned && $silence && $guards ? self::SUCCESS : self::FAILURE;
+        return $tokens && $scheduled && $cleared && $pruned && $silence && $guards ? self::SUCCESS : self::FAILURE;
     }
 
     /**
@@ -261,6 +268,38 @@ final class DoctorCommand extends Command
         }
 
         $this->components->error('Nothing in the scheduler runs '.implode(', ', $missing).'. Schedule each of them daily, or name the ones your server runs outside the scheduler with --scheduled-elsewhere.');
+
+        return false;
+    }
+
+    /**
+     * Report that nothing in the scheduler prunes the package's expired cache keys while the default store
+     * or the store of the rate limiter is a database or a file store, which keeps an expired key until it
+     * is read again; whether they are pruned. An entry counts that calls PruneExpiredCacheKeys by its
+     * class, as `Schedule::call(PruneExpiredCacheKeys::class)` does. A server that prunes outside the
+     * scheduler, or schedules the call under a name of its own, names prune-cache-keys with
+     * `--scheduled-elsewhere`.
+     */
+    private function expiredCacheKeysArePruned(Schedule $schedule, Repository $config): bool
+    {
+        $drivers = [];
+
+        foreach (['cache.default', 'cache.limiter'] as $key) {
+            $store = $config->get($key);
+            $drivers[] = is_string($store) && $store !== '' ? $config->get('cache.stores.'.$store.'.driver') : null;
+        }
+
+        $keeps = in_array('database', $drivers, true) || in_array('file', $drivers, true);
+        $pruning = array_any(
+            $schedule->events(),
+            static fn (Event $event): bool => $event instanceof CallbackEvent && $event->getSummaryForDisplay() === PruneExpiredCacheKeys::class,
+        );
+
+        if (! $keeps || $pruning || in_array(self::PRUNE_CACHE_KEYS, $this->scheduledElsewhere(), true)) {
+            return true;
+        }
+
+        $this->components->error('Nothing in the scheduler prunes the expired cache keys of the package, and the default store or the store of the rate limiter keeps them in a database or a file store until they are read again. Schedule Schedule::call(PruneExpiredCacheKeys::class)->daily(), or name prune-cache-keys with --scheduled-elsewhere where your server prunes outside the scheduler.');
 
         return false;
     }

@@ -18,6 +18,9 @@ use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Pushery\SanctumHardening\Abilities\AbilityCatalog;
 use Pushery\SanctumHardening\Abilities\AbilityRefused;
+use Pushery\SanctumHardening\Throttling\QuickstartLimits;
+use Pushery\SanctumHardening\Throttling\ResolvesQuickstartLimits;
+use Pushery\SanctumHardening\Throttling\ThrottleQuickstartLimits;
 use Pushery\SanctumHardening\Tokens\MintRefused;
 use Pushery\SanctumHardening\Tokens\PersonalTokens;
 use Pushery\SanctumHardening\Tokens\TokenNetworks;
@@ -75,6 +78,12 @@ final class TokenManager extends Component
      * the property takes the text as well, and mint() reads it.
      */
     public int|string|null $days = null;
+
+    /**
+     * The overlap chosen for the next rotation, in hours, null for the default one. Like the lifetime, the property takes
+     * the text of an option as well, and rotate() reads it.
+     */
+    public int|string|null $overlap = null;
 
     /** The addresses and networks the new token may be used from, as typed: one a line, none for anywhere. */
     public string $networks = '';
@@ -174,12 +183,21 @@ final class TokenManager extends Component
 
     /**
      * Replace one token of the list by its successor, which is shown once as a new token is, and let the old one work
-     * until the overlap has passed.
+     * until the overlap has passed: the one chosen on the screen, where it offers a choice, otherwise the default one.
+     * The next rotation starts from the default again.
      */
     public function rotate(string $tokenId): void
     {
+        $overlap = $this->chosenOverlap();
+
+        if ($overlap === false) {
+            $this->status = $this->line('refused.overlap');
+
+            return;
+        }
+
         try {
-            $successor = $this->tokens->rotate($this->request, $tokenId, $this->tokenable);
+            $successor = $this->tokens->rotate($this->request, $tokenId, $this->tokenable, $overlap);
         } catch (AbilityRefused|MintRefused $refusal) {
             $this->status = $this->line('refused.'.$refusal->reason, $refusal instanceof MintRefused ? $this->placeholdersOf($refusal) : []);
 
@@ -193,6 +211,7 @@ final class TokenManager extends Component
         }
 
         $this->plainTextToken = $successor->plainTextToken;
+        $this->overlap = null;
         $this->status = $this->line('rotated');
     }
 
@@ -213,9 +232,14 @@ final class TokenManager extends Component
         $config = $container->make(Repository::class);
         $owned = $this->tokens->listFor($this->request, $this->tokenable);
         $replacedUntil = $this->tokens->replacedUntil($owned);
+        $defaultOverlap = $this->tokens->defaultOverlap();
         $holder = $this->tokenable ?? $this->request->user();
         $grantable = $catalog->grantable($holder instanceof Model ? $holder : null);
         $endpoint = $config->get('sanctum-hardening.ui.endpoint');
+        // The limits the application names for the holder; a screen with no holder names the package limiter's.
+        $quickstart = $holder instanceof Model
+            ? $container->make(ResolvesQuickstartLimits::class)->limitsFor($holder)
+            : $container->make(ThrottleQuickstartLimits::class)->limits();
 
         $variant = $config->get('sanctum-hardening.ui.variant');
         // `auto` takes the WireKit view where the installed WireKit renders it, `wirekit` whatever the version.
@@ -234,7 +258,12 @@ final class TokenManager extends Component
             'replacedUntil' => $replacedUntil,
             'rotatable' => $owned->reject(static fn (Model $token): bool => Tokens::expired($token) || isset($replacedUntil[TokenPrefixes::key($token->getKey())]))
                 ->map(static fn (Model $token): string => TokenPrefixes::key($token->getKey()))->values()->all(),
-            'overlapHours' => $config->get('sanctum-hardening.rotation.overlap_hours'),
+            // The default overlap is the first option and the one without a value, as the default lifetime is in the form.
+            'defaultOverlap' => $defaultOverlap,
+            'overlaps' => array_values(array_diff($this->tokens->overlaps(), [$defaultOverlap])),
+            // What a rotation's question names: the overlap chosen, where it is one the screen offers.
+            'overlapHours' => is_int($chosenOverlap = $this->chosenOverlap()) ? $chosenOverlap : $defaultOverlap,
+            'duration' => $this->duration(...),
             'limits' => $container->make(TokenNetworks::class)->ofEach($owned),
             'uses' => $this->latestUses($container->make(TokenUses::class)->latestOf($owned)),
             // Where Sanctum writes no last use, `last_used_at` says nothing about a token, so the views say so.
@@ -248,8 +277,10 @@ final class TokenManager extends Component
             'endpoint' => is_string($endpoint) && trim($endpoint) !== ''
                 ? $endpoint
                 : $container->make(UrlGenerator::class)->to(is_string($prefix = $config->get('sanctum-hardening.routes.prefix')) ? $prefix : 'api'),
-            'perToken' => $config->get('sanctum-hardening.throttle.per_token'),
-            'perUser' => $config->get('sanctum-hardening.throttle.per_user'),
+            'quickstartLimits' => $this->quickstartLimits($quickstart),
+            // For a view a host published before the sentence above was written here.
+            'perToken' => $quickstart->perToken,
+            'perUser' => $quickstart->perHolder,
         ]);
     }
 
@@ -321,6 +352,31 @@ final class TokenManager extends Component
     }
 
     /**
+     * The overlap of the next rotation as rotate() takes it: null for the default, where nothing or the empty text of the
+     * default's option was chosen, and the hours of the chosen option otherwise, given as a number or as its text. An
+     * overlap the screen does not offer is refused, and the answer is false, since the property is written by the
+     * browser: no request gives a replaced token an overlap the application did not list.
+     */
+    private function chosenOverlap(): int|false|null
+    {
+        if ($this->overlap === null || $this->overlap === '') {
+            return null;
+        }
+
+        $hours = is_int($this->overlap) ? $this->overlap : filter_var($this->overlap, FILTER_VALIDATE_INT, FILTER_NULL_ON_FAILURE);
+
+        return is_int($hours) && in_array($hours, $this->tokens->overlaps(), true) ? $hours : false;
+    }
+
+    /** An overlap as the screen names it: in days where it is whole days, otherwise in hours. */
+    private function duration(int $hours): string
+    {
+        return $hours % 24 === 0
+            ? $this->translator->choice('sanctum-hardening::messages.screen.days', intdiv($hours, 24))
+            : $this->translator->choice('sanctum-hardening::messages.screen.hours', $hours);
+    }
+
+    /**
      * The lifetime of the form as a mint takes it: null for the default, where nothing or the empty text of the default's
      * option was chosen, and the number of days otherwise, given as a number or as its text. A text that is no whole
      * number names no lifetime the screen offers, and the answer is false. Cast, it would be 0, a token without an
@@ -384,6 +440,20 @@ final class TokenManager extends Component
         $user = $this->request->user();
 
         return ! ($user instanceof Model && $user->getMorphClass() === $this->tokenable->getMorphClass() && $user->is($this->tokenable));
+    }
+
+    /**
+     * The quickstart's sentence on the limits a token meets, in the holder's wording where the screen manages another
+     * holder: both limits, the one of them the application names, or null where it names neither.
+     */
+    private function quickstartLimits(QuickstartLimits $limits): ?string
+    {
+        return match (true) {
+            $limits->perToken !== null && $limits->perHolder !== null => $this->line('quickstart_limits', ['token' => (string) $limits->perToken, 'user' => (string) $limits->perHolder]),
+            $limits->perToken !== null => $this->line('quickstart_token_limit', ['token' => (string) $limits->perToken]),
+            $limits->perHolder !== null => $this->line('quickstart_user_limit', ['user' => (string) $limits->perHolder]),
+            default => null,
+        };
     }
 
     /**
