@@ -6,16 +6,16 @@ namespace Pushery\SanctumHardening\Console;
 
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Console\Isolatable;
+use Pushery\SanctumHardening\Tokens\KeyIds;
 use Pushery\SanctumHardening\Tokens\TokenAlerts;
 use Pushery\SanctumHardening\Tokens\TokenNetworks;
-use Pushery\SanctumHardening\Tokens\TokenPrefixes;
 use Pushery\SanctumHardening\Tokens\TokenRotations;
 use Symfony\Component\Console\Attribute\AsCommand;
 
 /**
- * Forget the prefixes, the networks and the alerts of tokens that are gone: the ones `sanctum:prune-expired`
- * deleted, and every other token deleted by a query rather than through its model. Schedule it beside
- * Sanctum's prune.
+ * Forget the key prefixes and identifiers, the networks, the alerts and the rotations of tokens that are gone:
+ * the ones `sanctum:prune-expired` deleted, and every other token deleted by a query rather than through its
+ * model. Schedule it beside Sanctum's prune.
  */
 #[AsCommand(name: 'sanctum-hardening:prune-prefixes')]
 final class PrunePrefixesCommand extends Command implements Isolatable
@@ -34,9 +34,9 @@ final class PrunePrefixesCommand extends Command implements Isolatable
      */
     protected $isolated = true;
 
-    public function handle(TokenPrefixes $prefixes, TokenNetworks $networks, TokenAlerts $alerts, TokenRotations $rotations): int
+    public function handle(KeyIds $keyIds, TokenNetworks $networks, TokenAlerts $alerts, TokenRotations $rotations): int
     {
-        $pruned = $prefixes->prune();
+        $pruned = $keyIds->prune();
         $limits = $networks->prune();
         $mailed = $alerts->prune();
         $replaced = $rotations->prune();

@@ -30,7 +30,7 @@ final readonly class TokenUses
     /** Record a request a token made, unless the same one was recorded within the interval. */
     public function record(Model $token, string $method, string $route, int $status): void
     {
-        $key = TokenPrefixes::key($token->getKey());
+        $key = Tokens::key($token->getKey());
 
         if (! Cache::add('sanctum-hardening:use:'.hash('sha256', "{$key} {$method} {$route} {$status}"), true, $this->setting('every', 60))) {
             return;
@@ -55,7 +55,7 @@ final readonly class TokenUses
         $uses = [];
 
         $rows = DB::table(self::TABLE)
-            ->where('token_id', TokenPrefixes::key($token->getKey()))
+            ->where('token_id', Tokens::key($token->getKey()))
             ->orderByDesc('used_at')
             ->orderByDesc('id')
             ->limit(max(1, $count))
@@ -82,7 +82,7 @@ final readonly class TokenUses
         $keys = [];
 
         foreach ($tokens as $token) {
-            $key = TokenPrefixes::key($token->getKey());
+            $key = Tokens::key($token->getKey());
             $uses[$key] = [];
             $keys[] = $key;
         }
@@ -127,7 +127,7 @@ final readonly class TokenUses
         $zone = new DateTimeZone(date_default_timezone_get());
 
         return DB::table(self::TABLE)
-            ->where('token_id', TokenPrefixes::key($token->getKey()))
+            ->where('token_id', Tokens::key($token->getKey()))
             ->whereBetween('used_at', [Moments::bound(DateTimeImmutable::createFromInterface($from)->setTimezone($zone)), Moments::bound(DateTimeImmutable::createFromInterface($until)->setTimezone($zone))])
             ->exists();
     }

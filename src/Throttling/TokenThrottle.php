@@ -5,19 +5,22 @@ declare(strict_types=1);
 namespace Pushery\SanctumHardening\Throttling;
 
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Translation\Translator;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Pushery\SanctumHardening\Tokens\TokenPrefixes;
+use Pushery\SanctumHardening\Tokens\Tokens;
 
 /**
- * The limits of the named limiter the API runs behind, in two stages: each token on its own, and each
- * user over all of their tokens. Without the second, a user gets past every limit of a token by
- * minting another one.
+ * The limits of the named limiter the API runs behind, from the tier of the request's holder, in two
+ * stages: each token on its own, and the holder over all of its tokens. Without the second, a holder
+ * gets past every limit of a token by minting another one. The tier comes from the application where it
+ * binds a ResolvesThrottleTier, and from `throttle.*` everywhere else.
  *
- * A request over either answers `429` as a problem document (RFC 9457) with `Retry-After`, whatever
+ * A request over a limit answers `429` as a problem document (RFC 9457) with `Retry-After`, whatever
  * the request asked for, because only an API client meets this limiter. A request nobody is signed
  * in for is counted by its address, an IPv6 address by its /64, kept as a keyed hash: a rate
  * limiter's key is a cache key, and error trackers record cache keys.
@@ -29,23 +32,78 @@ final readonly class TokenThrottle
         private Translator $translator,
     ) {}
 
-    /** @return list<Limit> */
+    /**
+     * @return list<Limit>
+     *
+     * @throws HttpResponseException for a write the tier allows none of, answered before anything is counted
+     */
     public function limits(Request $request): array
     {
         $user = $request->user();
         // @phpstan-ignore function.alreadyNarrowedType (only the analyzed user model is known to use HasApiTokens; a host's model need not)
         $token = $user instanceof Model && method_exists($user, 'currentAccessToken') ? $user->currentAccessToken() : null;
         $holder = $user instanceof Model
-            ? 'user:'.$user->getMorphClass().':'.TokenPrefixes::key($user->getKey())
+            ? 'user:'.$user->getMorphClass().':'.Tokens::key($user->getKey())
             : 'address:'.hash_hmac('sha256', $this->counted((string) $request->ip()), $this->secret());
+        $tier = $this->tierFor($user instanceof Model ? $user : null);
+        $writes = ! $request->isMethodSafe();
+        $seconds = [];
+        $budgets = [];
+        $minutes = [];
 
-        return [
-            $this->limit($this->perUser(), 'burst_per_user')->by('sanctum-hardening:'.$holder)->response($this->tooMany(...)),
+        foreach ([
+            [$tier->perHolder, $holder],
             // A session or a transient token has no row: its requests count as one token of the holder.
-            $this->limit($this->perToken(), 'burst_per_token')
-                ->by('sanctum-hardening:'.($token instanceof Model ? 'token:'.TokenPrefixes::key($token->getKey()) : 'session:'.$holder))
-                ->response($this->tooMany(...)),
-        ];
+            [$tier->perToken, $token instanceof Model ? 'token:'.Tokens::key($token->getKey()) : 'session:'.$holder],
+        ] as [$counter, $by]) {
+            if (! $counter instanceof ThrottleCounter) {
+                continue;
+            }
+
+            if ($counter->perSecond !== null) {
+                $seconds[] = Limit::perSecond($counter->perSecond)->by('sanctum-hardening:second:'.$by)->response($this->tooMany(...));
+            }
+
+            if ($writes && $counter->writesPerMinute !== null) {
+                // Laravel's throttle lets the first request through a limit of none, so the refusal comes from here.
+                if ($counter->writesPerMinute === 0) {
+                    throw new HttpResponseException($this->writeRefused($request));
+                }
+
+                $budgets[] = Limit::perMinute($counter->writesPerMinute)->by('sanctum-hardening:writes:'.$by)->response($this->tooMany(...));
+            }
+
+            $minutes[] = $this->limit($counter->perMinute, $counter->burst)->by('sanctum-hardening:'.$by)->response($this->tooMany(...));
+        }
+
+        // Laravel's throttle asks every limit before it counts a request in any. Its Redis variant counts each limit as
+        // it asks it, so the limits per second and the budgets of writes come first: a request one of them refuses has
+        // then cost nothing against the rate. The token's rate comes last, so the rate limit headers name its numbers.
+        return [...$seconds, ...$budgets, ...$minutes];
+    }
+
+    /**
+     * The tier the holder's requests count against: the application's where its ResolvesThrottleTier gives one, and the
+     * one `throttle.*` configures for every other holder and for a request nobody is signed in for. The resolver is asked
+     * on every call, so a tier the application changes counts at once.
+     */
+    public function tierFor(?Model $holder): ThrottleTier
+    {
+        $tier = $holder instanceof Model ? Container::getInstance()->make(ResolvesThrottleTier::class)->tierFor($holder) : null;
+
+        return $tier ?? $this->configuredTier();
+    }
+
+    /**
+     * The tier `throttle.*` configures: `per_token` and `burst_per_token` for each token, `per_user` and `burst_per_user`
+     * for its holder over all of its tokens, with no limit per second and no budget of writes.
+     */
+    public function configuredTier(): ThrottleTier
+    {
+        return new ThrottleTier(
+            perToken: new ThrottleCounter($this->perToken(), burst: $this->burst('burst_per_token')),
+            perHolder: new ThrottleCounter($this->perUser(), burst: $this->burst('burst_per_user')),
+        );
     }
 
     /**
@@ -71,15 +129,13 @@ final readonly class TokenThrottle
      * window of `burst` requests, as long as `burst / rate` minutes take, to the second. With no burst above the rate,
      * the window is the minute, as it always was.
      */
-    private function limit(int $perMinute, string $burst): Limit
+    private function limit(int $perMinute, ?int $burst): Limit
     {
-        $allowed = $this->config->get('sanctum-hardening.throttle.'.$burst);
-
-        if (! is_int($allowed) || $allowed <= $perMinute) {
+        if ($burst === null || $burst <= $perMinute) {
             return Limit::perMinute($perMinute);
         }
 
-        return new Limit('', $allowed, (int) round($allowed / $perMinute * 60));
+        return new Limit('', $burst, (int) round($burst / $perMinute * 60));
     }
 
     /**
@@ -91,9 +147,29 @@ final readonly class TokenThrottle
     {
         $detail = $this->translator->get('sanctum-hardening::messages.throttled');
 
+        return $this->problem($request, is_string($detail) ? $detail : '', $headers);
+    }
+
+    /**
+     * The answer to a write the tier allows none of. Waiting lets no write through, so it names no `Retry-After`.
+     */
+    private function writeRefused(Request $request): JsonResponse
+    {
+        $detail = $this->translator->get('sanctum-hardening::messages.writes_refused');
+
+        return $this->problem($request, is_string($detail) ? $detail : '', []);
+    }
+
+    /**
+     * A problem document (RFC 9457) with the status 429.
+     *
+     * @param  array<array-key, mixed>  $headers  the headers it is sent with besides its content type
+     */
+    private function problem(Request $request, string $detail, array $headers): JsonResponse
+    {
         return new JsonResponse(
             // `instance` names the occurrence, RFC 9457 §3.1.5: the path the request was refused at.
-            ['type' => 'about:blank', 'title' => 'Too Many Requests', 'status' => 429, 'detail' => is_string($detail) ? $detail : '', 'instance' => '/'.ltrim($request->path(), '/')],
+            ['type' => 'about:blank', 'title' => 'Too Many Requests', 'status' => 429, 'detail' => $detail, 'instance' => '/'.ltrim($request->path(), '/')],
             429,
             [...$headers, 'Content-Type' => 'application/problem+json'],
         );
@@ -122,6 +198,14 @@ final readonly class TokenThrottle
         $key = $this->config->get('app.key');
 
         return is_string($key) ? $key : '';
+    }
+
+    /** A burst of `throttle.*`, or none where it is no whole number of one or more. */
+    private function burst(string $key): ?int
+    {
+        $value = $this->config->get('sanctum-hardening.throttle.'.$key);
+
+        return is_int($value) && $value >= 1 ? $value : null;
     }
 
     private function positive(string $key, int $shipped): int

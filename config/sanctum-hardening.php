@@ -58,6 +58,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Keys
+    |--------------------------------------------------------------------------
+    | Every token the package mints is a key of the form
+    | `<product>_<environment>_<id>_<secret><checksum>`. The prefix tells a person, and a secret
+    | scanner, what a key belongs to; the identifier names the key on the screen and in logs.
+    |
+    | `product` is 2 to 10 letters a-z. Unset, the letters of `app.name` in lower case stand in
+    | for it, cut to ten, and `app` where they are fewer than two. `environment` is `live` or
+    | `test`. Unset, it is `live` where `app.env` is `production` and `test` everywhere else.
+    | A value a key cannot name refuses the mint with the setting named.
+    */
+    'keys' => [
+        'product' => env('SANCTUM_HARDENING_KEY_PRODUCT'),
+        'environment' => env('SANCTUM_HARDENING_KEY_ENVIRONMENT'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Minting
     |--------------------------------------------------------------------------
     | A taken-over session could otherwise issue itself a dozen long-lived tokens in seconds,

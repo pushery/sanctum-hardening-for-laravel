@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Sanctum\PersonalAccessToken;
 use Laravel\Sanctum\Sanctum;
 use Livewire\Livewire;
 use Override;
@@ -22,17 +23,20 @@ use Pushery\SanctumHardening\Console\PruneUsesCommand;
 use Pushery\SanctumHardening\Console\SendAlertsCommand;
 use Pushery\SanctumHardening\Livewire\TokenManager;
 use Pushery\SanctumHardening\Support\LanguageFallbackLoader;
+use Pushery\SanctumHardening\Throttling\NoThrottleTier;
 use Pushery\SanctumHardening\Throttling\ResolvesQuickstartLimits;
+use Pushery\SanctumHardening\Throttling\ResolvesThrottleTier;
 use Pushery\SanctumHardening\Throttling\ThrottleQuickstartLimits;
 use Pushery\SanctumHardening\Throttling\TokenThrottle;
 use Pushery\SanctumHardening\Tokens\AlertsToTheHolder;
+use Pushery\SanctumHardening\Tokens\KeyIds;
 use Pushery\SanctumHardening\Tokens\LastUsedThrottle;
 use Pushery\SanctumHardening\Tokens\NoTokenLimit;
 use Pushery\SanctumHardening\Tokens\ResolvesTokenAlerts;
 use Pushery\SanctumHardening\Tokens\ResolvesTokenLimit;
+use Pushery\SanctumHardening\Tokens\SanctumHardeningPersonalAccessToken;
 use Pushery\SanctumHardening\Tokens\TokenAlerts;
 use Pushery\SanctumHardening\Tokens\TokenNetworks;
-use Pushery\SanctumHardening\Tokens\TokenPrefixes;
 use Pushery\SanctumHardening\Tokens\TokenRotations;
 
 final class SanctumHardeningServiceProvider extends ServiceProvider
@@ -75,6 +79,7 @@ final class SanctumHardeningServiceProvider extends ServiceProvider
         $this->app->bindIf(ResolvesTokenLimit::class, NoTokenLimit::class);
         $this->app->bindIf(ResolvesTokenAlerts::class, AlertsToTheHolder::class);
         $this->app->bindIf(ResolvesQuickstartLimits::class, ThrottleQuickstartLimits::class);
+        $this->app->bindIf(ResolvesThrottleTier::class, NoThrottleTier::class);
     }
 
     public function boot(): void
@@ -103,6 +108,13 @@ final class SanctumHardeningServiceProvider extends ServiceProvider
         $config = $this->app->make(Repository::class);
         $config->set('sanctum.guard', SanctumHardening::sessionGuards($config));
 
+        // A key in the key format finds its token through a model that reads the format. Where the
+        // application keeps Sanctum's own model, the package sets one that does; an application that sets
+        // a model of its own in its boot(), which runs after this one, uses FindsTokensByKey on it.
+        if (Sanctum::$personalAccessTokenModel === PersonalAccessToken::class) {
+            Sanctum::usePersonalAccessTokenModel(SanctumHardeningPersonalAccessToken::class);
+        }
+
         // After every provider has booted, so a model the application sets with
         // Sanctum::usePersonalAccessTokenModel() in its own boot() is the one listened to.
         $this->app->booted(function (): void {
@@ -110,7 +122,7 @@ final class SanctumHardeningServiceProvider extends ServiceProvider
 
             Event::listen('eloquent.saving: '.$model, static fn (Model $token): ?bool => LastUsedThrottle::holdsBack($token) ? false : null);
             Event::listen('eloquent.deleted: '.$model, function (Model $token): void {
-                $this->app->make(TokenPrefixes::class)->forget($token->getKey());
+                $this->app->make(KeyIds::class)->forget($token->getKey());
                 $this->app->make(TokenNetworks::class)->forget($token->getKey());
                 $this->app->make(TokenAlerts::class)->forget($token->getKey());
                 $this->app->make(TokenRotations::class)->forget($token->getKey());

@@ -5,6 +5,8 @@ declare(strict_types=1);
 return [
     // The detail of the problem document a throttled request is answered with.
     'throttled' => 'Demasiadas solicitudes. Se puede enviar otra cuando haya pasado el tiempo de la cabecera Retry-After.',
+    // The detail of the problem document a write is answered with where the tier allows no writes.
+    'writes_refused' => 'Este nivel no permite solicitudes que escriban o eliminen.',
     // The self-service screen of a user's tokens.
     'screen' => [
         'heading' => 'Tokens de API',

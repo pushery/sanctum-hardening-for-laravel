@@ -21,7 +21,6 @@ use Pushery\SanctumHardening\Tokens\Moments;
 use Pushery\SanctumHardening\Tokens\NetworksCallback;
 use Pushery\SanctumHardening\Tokens\TokenAlerts;
 use Pushery\SanctumHardening\Tokens\TokenNetworks;
-use Pushery\SanctumHardening\Tokens\TokenPrefixes;
 use Pushery\SanctumHardening\Tokens\TokenRevocations;
 use Pushery\SanctumHardening\Tokens\Tokens;
 use Pushery\SanctumHardening\Tokens\TokenUses;
@@ -182,7 +181,7 @@ final class DoctorCommand extends Command
         foreach ($model->newQuery()->select([$model->getKeyName(), 'abilities'])->lazyById(500, $model->getKeyName()) as $token) {
             $count++;
             $abilities = Tokens::abilitiesOf($token);
-            $key = TokenPrefixes::key($token->getKey());
+            $key = Tokens::key($token->getKey());
 
             $names = array_filter($abilities, is_string(...));
 

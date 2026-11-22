@@ -34,10 +34,10 @@ final readonly class TokenRotations
 
         return DB::connection()->transaction(static function () use ($token, $successor, $ends, $by, $now): bool {
             $recorded = DB::table(self::TABLE)->insertOrIgnore([
-                'token_id' => TokenPrefixes::key($token->getKey()),
-                'successor_id' => TokenPrefixes::key($successor->getKey()),
+                'token_id' => Tokens::key($token->getKey()),
+                'successor_id' => Tokens::key($successor->getKey()),
                 'rotated_by_type' => $by?->getMorphClass(),
-                'rotated_by_id' => $by instanceof Model ? TokenPrefixes::key($by->getKey()) : null,
+                'rotated_by_id' => $by instanceof Model ? Tokens::key($by->getKey()) : null,
                 'rotated_at' => Moments::bound($now),
                 'ends_at' => Moments::bound($ends),
             ]) > 0;
@@ -63,7 +63,7 @@ final readonly class TokenRotations
         $keys = [];
 
         foreach ($tokens as $token) {
-            $keys[] = TokenPrefixes::key($token->getKey());
+            $keys[] = Tokens::key($token->getKey());
         }
 
         $ends = [];
@@ -82,7 +82,7 @@ final readonly class TokenRotations
      */
     public function forget(mixed $tokenKey): void
     {
-        DB::table(self::TABLE)->where('token_id', TokenPrefixes::key($tokenKey))->delete();
+        DB::table(self::TABLE)->where('token_id', Tokens::key($tokenKey))->delete();
     }
 
     /**
@@ -98,7 +98,7 @@ final readonly class TokenRotations
         // By key rather than by offset, so the rows deleted on the way make the walk skip none.
         foreach (DB::table(self::TABLE)->select('token_id')->lazyById($size, 'token_id')->chunk($size) as $rows) {
             $keys = array_values(array_filter($rows->pluck('token_id')->all(), is_string(...)));
-            $existing = array_map(TokenPrefixes::key(...), $model->newQuery()->whereIn($model->getKeyName(), $keys)->pluck($model->getKeyName())->all());
+            $existing = array_map(Tokens::key(...), $model->newQuery()->whereIn($model->getKeyName(), $keys)->pluck($model->getKeyName())->all());
             $gone = array_values(array_diff($keys, $existing));
 
             if ($gone !== []) {

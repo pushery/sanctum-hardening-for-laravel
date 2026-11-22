@@ -42,7 +42,7 @@ final readonly class TokenNetworks
     public function restrict(Model $token, array $networks): void
     {
         $checked = self::checked($networks);
-        $key = TokenPrefixes::key($token->getKey());
+        $key = Tokens::key($token->getKey());
         $stored = $checked === [] ? null : json_encode($checked, JSON_THROW_ON_ERROR);
 
         DB::transaction(static function () use ($key, $stored): void {
@@ -61,7 +61,7 @@ final readonly class TokenNetworks
      */
     public function of(Model $token): array
     {
-        return $this->decoded(DB::table(self::TABLE)->where('token_id', TokenPrefixes::key($token->getKey()))->value('networks'));
+        return $this->decoded(DB::table(self::TABLE)->where('token_id', Tokens::key($token->getKey()))->value('networks'));
     }
 
     /**
@@ -75,13 +75,13 @@ final readonly class TokenNetworks
         $keys = [];
 
         foreach ($tokens as $token) {
-            $keys[] = TokenPrefixes::key($token->getKey());
+            $keys[] = Tokens::key($token->getKey());
         }
 
         $limits = [];
 
         foreach (DB::table(self::TABLE)->whereIn('token_id', $keys)->get(['token_id', 'networks']) as $row) {
-            $limits[TokenPrefixes::key($row->token_id ?? null)] = $this->decoded($row->networks ?? null);
+            $limits[Tokens::key($row->token_id ?? null)] = $this->decoded($row->networks ?? null);
         }
 
         return $limits;
@@ -102,12 +102,12 @@ final readonly class TokenNetworks
      */
     public function forget(mixed $tokenKey): void
     {
-        DB::table(self::TABLE)->where('token_id', TokenPrefixes::key($tokenKey))->delete();
+        DB::table(self::TABLE)->where('token_id', Tokens::key($tokenKey))->delete();
     }
 
     /**
-     * Forget the networks of tokens that no longer exist, and say how many, the way TokenPrefixes::prune()
-     * forgets their prefixes.
+     * Forget the networks of tokens that no longer exist, and say how many, the way KeyIds::prune()
+     * forgets their identifiers.
      */
     public function prune(int $chunk = 500): int
     {
@@ -118,7 +118,7 @@ final readonly class TokenNetworks
         // By key rather than by offset, so the rows deleted on the way make the walk skip none.
         foreach (DB::table(self::TABLE)->select('token_id')->lazyById($size, 'token_id')->chunk($size) as $rows) {
             $keys = array_values(array_filter($rows->pluck('token_id')->all(), is_string(...)));
-            $existing = array_map(TokenPrefixes::key(...), $model->newQuery()->whereIn($model->getKeyName(), $keys)->pluck($model->getKeyName())->all());
+            $existing = array_map(Tokens::key(...), $model->newQuery()->whereIn($model->getKeyName(), $keys)->pluck($model->getKeyName())->all());
             $gone = array_values(array_diff($keys, $existing));
 
             if ($gone !== []) {
