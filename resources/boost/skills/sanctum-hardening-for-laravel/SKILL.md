@@ -25,20 +25,26 @@ its user may do, in the smallest correct way.
 
 Before you start, set up Sanctum. `composer require` installs it along with this package but does
 not set it up: `php artisan install:api` creates Sanctum's `personal_access_tokens` table and
-`routes/api.php`. The model that holds tokens, usually `App\Models\User`, uses Sanctum's trait, or
-a mint is refused for it:
+`routes/api.php`. The model that holds tokens, usually `App\Models\User`, uses Sanctum's
+`HasApiTokens`, or a mint is refused for it. The package's `HasApiKeys` uses Sanctum's trait and
+makes `createToken()` hand out a key in the package's format, so it goes in its place:
 
 ```php
 namespace App\Models;
 
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Laravel\Sanctum\HasApiTokens;
+use Pushery\SanctumHardening\Tokens\HasApiKeys;
 
 class User extends Authenticatable
 {
-    use HasApiTokens;
+    use HasApiKeys;
 }
 ```
+
+Every token the package mints is a key, `<product>_<environment>_<id>_<secret><checksum>`, with the
+product and the environment from `keys.product` and `keys.environment`. A value whose form or
+checksum is wrong, Sanctum's own `<id>|<text>` among them, is refused before the database is asked.
+An application with a token model of its own uses `FindsTokensByKey` on it.
 
 ```bash
 # 1. Set up Sanctum, unless the application already has
@@ -86,7 +92,7 @@ publishes the migrations with every other group. Without the call, the name `ven
 a copy decides what `migrate` does with it. A copy named with the current date runs beside the
 package's own file and fails on a table that already exists. A copy that kept the package's file
 name is the same migration as that file, and `migrate` runs it once. The migrations create
-`sanctum_hardening_token_prefixes`, `sanctum_hardening_token_revocations`,
+`sanctum_hardening_key_ids`, `sanctum_hardening_token_prefixes`, `sanctum_hardening_token_revocations`,
 `sanctum_hardening_token_networks`, `sanctum_hardening_token_uses`,
 `sanctum_hardening_token_alerts` and `sanctum_hardening_token_rotations`.
 
@@ -133,6 +139,10 @@ from as its last argument, at most `sanctum-hardening.minting.max_networks_per_t
 `then` callback of `withRouting()` in `bootstrap/app.php`, which puts them under `/api`, behind
 `auth:sanctum` and the package's limiter, and registers none while the API is switched off; a route
 the route cache still holds answers `404` then.
+The limiter counts each token and its holder with the holder's tier: bind a `ResolvesThrottleTier`
+that gives a `ThrottleTier` of `ThrottleCounter`s (`perMinute`, `perSecond`, `writesPerMinute`, where `0`
+refuses every write, and `burst`) or null, and a holder without one counts against `throttle.per_token`
+and `throttle.per_user`.
 
 An application with Livewire embeds the self-service screen, `<livewire:sanctum-hardening.tokens />`, on a
 page behind `auth` and `password.confirm`. On a page with a header of its own, pass `:heading="false"`, which
@@ -201,6 +211,11 @@ use Pushery\SanctumHardening\SanctumHardening;
   loads that file under the prefix `api` already, so the routes answer under `/api/api/`. Call it in
   `bootstrap/app.php`, or set `routes.prefix` to `''`, `routes.middleware` to `['auth:sanctum']` and
   `ui.endpoint` to the API's address for a call in that file.
+- Keeping Sanctum's `HasApiTokens` on a model whose tokens the application's own code mints with
+  `createToken()`: the token is `<id>|<text>`, which the package's token model refuses. Use
+  `HasApiKeys`, which keeps Sanctum's trait.
+- Setting a token model of one's own without `FindsTokensByKey`: Sanctum's `findToken()` reads the
+  running number before a `|`, so no key is ever found.
 - Offering a reserved ability in a form: it is refused, and a token that carries one never appears
   in the self-service.
 - Minting a workspace's token for the owner or through `mintForSystem()`: the first ends when the

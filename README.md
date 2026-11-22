@@ -35,7 +35,8 @@ there.
 Before you start, set up Sanctum. `composer require` installs it along with this package but does
 not set it up: `php artisan install:api` creates Sanctum's `personal_access_tokens` table and
 `routes/api.php`, and the model that holds tokens, usually `App\Models\User`, uses Sanctum's
-`Laravel\Sanctum\HasApiTokens` trait.
+`Laravel\Sanctum\HasApiTokens` trait through the package's `HasApiKeys`, which makes `createToken()`
+hand out a key in the package's format as well.
 
 Tested on PostgreSQL and MySQL 8.4, the databases Laravel Cloud runs (serverless Postgres
 and MySQL 8.4 LTS). The fast suite runs on SQLite.
@@ -56,11 +57,12 @@ php artisan migrate
 ```
 
 The service provider is registered automatically through package discovery. The migrations create
-six tables of the package's own, and every row in them belongs to one token:
+seven tables of the package's own, and every row in them belongs to one token:
 
 | Table | Holds | Deleted by |
 |---|---|---|
-| `sanctum_hardening_token_prefixes` | the first characters of each token's secret, so a person can tell their tokens apart | deleting the token through its model, `sanctum-hardening:prune-prefixes` once a query deleted the token, and `sanctum-hardening:prune-revocations` with a revoked token |
+| `sanctum_hardening_key_ids` | the identifier inside each token's key and the characters the key starts with, so a key finds its token and a person can tell their tokens apart | deleting the token through its model, `sanctum-hardening:prune-prefixes` once a query deleted the token, and `sanctum-hardening:prune-revocations` with a revoked token, whose identifier stays as long as the record of its revocation |
+| `sanctum_hardening_token_prefixes` | nothing any more: it held the first characters of each secret of a token in Sanctum's own format, which no longer authenticates | an application that wants the table gone, with a migration of its own: `sanctum-hardening:prune-prefixes` no longer touches it |
 | `sanctum_hardening_token_networks` | the addresses and networks a token is limited to | deleting the token through its model, `sanctum-hardening:prune-prefixes` once a query deleted the token, `sanctum-hardening:prune-revocations` with a revoked token, and `restrict()` of `TokenNetworks` with an empty list |
 | `sanctum_hardening_token_alerts` | the alerts mailed for a token, by kind and occasion, so none is mailed twice | deleting the token through its model, `sanctum-hardening:prune-prefixes` once a query deleted the token, and `sanctum-hardening:prune-revocations` with a revoked token |
 | `sanctum_hardening_token_rotations` | which token replaced which, who rotated it, and until when the replaced one works | deleting the token through its model, `sanctum-hardening:prune-prefixes` once a query deleted the token, and `sanctum-hardening:prune-revocations` with a revoked token |
@@ -212,13 +214,13 @@ configuration stay in the development repository, so a clone of this repository 
 Please review the [security policy](SECURITY.md) and report vulnerabilities
 privately rather than opening a public issue.
 
-## Built by Pushery
+## Built by PUSHERY
 
-This package is built and maintained by [Pushery](https://www.pushery.com) — a
+This package is built and maintained by [PUSHERY](https://www.pushery.com) — a
 Berlin-based studio building Laravel applications, SaaS products, and open-source
 tools.
 
-Building a Laravel UI? [WireKit](https://www.wirekit.app) is Pushery's open-source
+Building a Laravel UI? [WireKit](https://www.wirekit.app) is PUSHERY's open-source
 Livewire component kit.
 Browse the rest of our work at [pushery.com](https://www.pushery.com).
 

@@ -21,10 +21,10 @@ use Pushery\SanctumHardening\Abilities\AbilityRefused;
 use Pushery\SanctumHardening\Throttling\QuickstartLimits;
 use Pushery\SanctumHardening\Throttling\ResolvesQuickstartLimits;
 use Pushery\SanctumHardening\Throttling\ThrottleQuickstartLimits;
+use Pushery\SanctumHardening\Tokens\KeyIds;
 use Pushery\SanctumHardening\Tokens\MintRefused;
 use Pushery\SanctumHardening\Tokens\PersonalTokens;
 use Pushery\SanctumHardening\Tokens\TokenNetworks;
-use Pushery\SanctumHardening\Tokens\TokenPrefixes;
 use Pushery\SanctumHardening\Tokens\Tokens;
 use Pushery\SanctumHardening\Tokens\TokenUse;
 use Pushery\SanctumHardening\Tokens\TokenUses;
@@ -172,7 +172,7 @@ final class TokenManager extends Component
      */
     public function revoke(string $tokenId): void
     {
-        $listed = $this->tokens->listFor($this->request, $this->tokenable)->map(static fn (Model $token): string => TokenPrefixes::key($token->getKey()))->values()->all();
+        $listed = $this->tokens->listFor($this->request, $this->tokenable)->map(static fn (Model $token): string => Tokens::key($token->getKey()))->values()->all();
         $revoked = $this->tokens->revoke($this->request, $tokenId, $this->tokenable);
         $this->status = $this->line($revoked ? 'revoked' : 'not_revoked');
 
@@ -254,10 +254,10 @@ final class TokenManager extends Component
             'holder' => $this->holdsAnother(),
             'asksForPassword' => ! $this->tokens->passwordConfirmed($this->request),
             'tokens' => $owned,
-            'prefixes' => $container->make(TokenPrefixes::class)->of($owned),
+            'prefixes' => $container->make(KeyIds::class)->of($owned),
             'replacedUntil' => $replacedUntil,
-            'rotatable' => $owned->reject(static fn (Model $token): bool => Tokens::expired($token) || isset($replacedUntil[TokenPrefixes::key($token->getKey())]))
-                ->map(static fn (Model $token): string => TokenPrefixes::key($token->getKey()))->values()->all(),
+            'rotatable' => $owned->reject(static fn (Model $token): bool => Tokens::expired($token) || isset($replacedUntil[Tokens::key($token->getKey())]))
+                ->map(static fn (Model $token): string => Tokens::key($token->getKey()))->values()->all(),
             // The default overlap is the first option and the one without a value, as the default lifetime is in the form.
             'defaultOverlap' => $defaultOverlap,
             'overlaps' => array_values(array_diff($this->tokens->overlaps(), [$defaultOverlap])),

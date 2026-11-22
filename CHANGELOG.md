@@ -4,6 +4,20 @@ All notable changes to `pushery/sanctum-hardening-for-laravel` are documented he
 
 A release carries only the sections that have an entry, in this order: `### ⚠️ Breaking`, `### ✨ Added`, `### 🔧 Changed`, `### ⚡ Performance`, `### 🐛 Fixed`, `### 🔒 Security`, `### 🧹 Deprecated`, `### 🗑️ Removed` and `### 📚 Documentation`.
 
+## [0.8.0] - 2026-11-22
+
+### ⚠️ Breaking
+
+- **Every token the package mints is a key in a format of its own, and Sanctum's `<id>|<text>` no longer authenticates.** A key reads `<product>_<environment>_<id>_<secret><checksum>`: a prefix that tells a person and a secret scanner what the key belongs to, a public identifier of 12 characters, a secret of 43 characters and a CRC-32 checksum in base 62. Sanctum's `token` column holds the SHA-256 of the whole key. The package sets `SanctumHardeningPersonalAccessToken` as Sanctum's token model, which reads the form and the checksum before it asks the database and then finds the token by its identifier, so a mistyped key and a value of Sanctum's own form cost no query. **Upgrade:** every token minted before this release stops working and is minted again. A model whose tokens the application's own code mints with `createToken()` uses `HasApiKeys` in place of Sanctum's `HasApiTokens`, and an application that sets a token model of its own uses `FindsTokensByKey` on it. The release adds a migration for the table `sanctum_hardening_key_ids`; where the migrations are published, copy `2026_11_21_000000_create_sanctum_hardening_key_ids_table.php` from `vendor/pushery/sanctum-hardening-for-laravel/database/migrations` into `database/migrations` and run `php artisan migrate`.
+- **The screen, the mails and the record of a revocation name a token by the start of its key.** They named it by the first twelve characters of its secret, kept in `sanctum_hardening_token_prefixes`, and now name it by the characters its key starts with, up to and including the identifier, which give away nothing of the secret. `TokenRevocation` carries them as `keyPrefix`. `TokenPrefixes` is gone: `of()` of `KeyIds` gives the prefixes of the given tokens and `idsOf()` their identifiers. `sanctum.token_prefix` no longer applies to the tokens the package mints. **Upgrade:** the table `sanctum_hardening_token_prefixes` is no longer read or written, and an application that wants it gone drops it with a migration of its own. A mail sent before the release names the old prefix. An export of an account's data that read the old table reads `of()` of `KeyIds`.
+
+### ✨ Added
+
+- **`keys.product` and `keys.environment` set the prefix of every key.** The product is 2 to 10 letters a-z and the environment `live` or `test`, read from `SANCTUM_HARDENING_KEY_PRODUCT` and `SANCTUM_HARDENING_KEY_ENVIRONMENT`. Unset, the letters of `app.name` stand in for the product, cut to ten, and the environment is `live` where `app.env` is `production` and `test` everywhere else. A value a key cannot name refuses the mint with the setting named.
+- **`KeyFormat` reads and issues keys for code of an application's own.** `KeyFormat::parse()` gives a key's product, environment, tenant and identifier, or null for a value that is no key, `KeyFormat::refusal()` the first rule a value breaks, `KeyFormat::fingerprint()` the `sha256:` fingerprint of the whole key, and `KeyFormat::PATTERN` the pattern a secret scanner finds a key by.
+- **The limiter reads a holder's limits from a tier the application gives.** `ResolvesThrottleTier` gives the `ThrottleTier` of a holder, a user or the workspace a token was minted for: a `ThrottleCounter` for each token, one for the holder over all of its tokens, or both, each with the requests a minute, the most requests in one second, a budget of writes for every request with a method other than `GET`, `HEAD`, `OPTIONS` and `TRACE`, where `0` refuses every write, and a burst. The limiter asks on every request it counts, so a changed tier counts at once. Unbound, and for a holder it gives no tier, `throttle.*` is the tier, counted under the keys and with the numbers of before, so an application without tiers notices nothing. The quickstart of the screen names the rates of the holder's tier. **Upgrade:** nothing changes for an application without tiers; `throttle.per_token`, `throttle.per_user` and the two bursts now name the tier every holder without one counts against.
+- **`PruneExpiredCacheKeys` also prunes behind a `failover` store and a `storage` store.** Both of these Laravel cache drivers leave expired entries behind as a database or a file store does. A failover store writes each entry into the first of its stores that answers, so the pruner goes through each of its stores once. A storage store lays its files out on a filesystem disk the way a file store does in its directory, and the pruner deletes the expired files the store laid out there and leaves every other file on the disk alone.
+
 ## [0.7.0] - 2026-11-21
 
 ### ✨ Added
@@ -195,7 +209,8 @@ A release carries only the sections that have an entry, in this order: `### ⚠�
 - **The prefixes of deleted tokens are pruned.** `sanctum-hardening:prune-prefixes` forgets the prefix of every token that no longer exists, the ones a query deleted included, as `sanctum:prune-expired` deletes them. Schedule it beside Sanctum's prune.
 - **The last use of a token written once a minute.** Sanctum's write of `last_used_at` on every request goes through once every `last_used_at.every` seconds.
 
-[Unreleased]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.4.1...v0.5.0

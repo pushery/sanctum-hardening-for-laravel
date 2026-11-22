@@ -16,7 +16,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Date;
 use Laravel\Sanctum\NewAccessToken;
-use LogicException;
 use Pushery\SanctumHardening\Abilities\AbilityCatalog;
 use Pushery\SanctumHardening\Abilities\AbilityRefused;
 
@@ -63,7 +62,7 @@ final readonly class PersonalTokens
         private Gate $gate,
         private RateLimiter $limiter,
         private ResolvesTokenLimit $limits,
-        private TokenPrefixes $prefixes,
+        private Keys $keys,
         private TokenRevocations $revocations,
         private TokenNetworks $networks,
         private Hasher $hasher,
@@ -123,7 +122,7 @@ final readonly class PersonalTokens
     public function rotate(Request $request, int|string $tokenId, ?Model $tokenable = null, ?int $overlapHours = null): ?NewAccessToken
     {
         $owner = $tokenable ?? $request->user();
-        $token = $this->listFor($request, $tokenable)->first(static fn (Model $token): bool => TokenPrefixes::key($token->getKey()) === (string) $tokenId);
+        $token = $this->listFor($request, $tokenable)->first(static fn (Model $token): bool => Tokens::key($token->getKey()) === (string) $tokenId);
 
         if (! $owner instanceof Model || ! $token instanceof Model || Tokens::expired($token) || $this->rotations->endsOf([$token]) !== []) {
             return null;
@@ -199,7 +198,7 @@ final readonly class PersonalTokens
      */
     private function mintChecked(Request $request, Model $tokenable, string $name, array $abilities, ?int $days, array $networks, bool $rotating): NewAccessToken
     {
-        if (! method_exists($tokenable, 'createToken')) {
+        if (! method_exists($tokenable, 'tokens')) {
             throw MintRefused::notTokenable();
         }
 
@@ -216,7 +215,7 @@ final readonly class PersonalTokens
         $granted = $this->catalog->check($abilities, holder: $tokenable);
         $limitedTo = TokenNetworks::checked($networks);
         $expiresAt = $this->expiryFor($days);
-        $holder = 'sanctum-hardening:mint:'.$tokenable->getMorphClass().':'.TokenPrefixes::key($tokenable->getKey());
+        $holder = 'sanctum-hardening:mint:'.$tokenable->getMorphClass().':'.Tokens::key($tokenable->getKey());
 
         // Counting and then creating is read-then-act: without the lock, a burst of requests at once
         // could all find room under the limit before any of them writes a row.
@@ -244,12 +243,10 @@ final readonly class PersonalTokens
                 throw MintRefused::passwordNotConfirmed();
             }
 
-            $created = $tokenable->createToken($name, $granted, $expiresAt);
-            $minted = $created instanceof NewAccessToken ? $created : throw new LogicException('createToken() answered something other than a NewAccessToken.');
+            $minted = $this->keys->mint($tokenable, $name, $granted, $expiresAt);
 
             // Only a token that was minted counts against the minute, so a refused request costs nothing.
             $this->limiter->hit($holder, 60);
-            $this->prefixes->record($minted);
             $this->networks->restrict($minted->accessToken, $limitedTo);
 
             return $minted;
@@ -269,7 +266,7 @@ final readonly class PersonalTokens
      */
     public function mintForSystem(Model $user, string $name, array $abilities, ?DateTimeInterface $expiresAt = null, array $networks = []): NewAccessToken
     {
-        if (! method_exists($user, 'createToken')) {
+        if (! method_exists($user, 'tokens')) {
             throw MintRefused::notTokenable();
         }
 
@@ -277,9 +274,7 @@ final readonly class PersonalTokens
 
         $granted = $this->catalog->check($abilities, system: true);
         $limitedTo = TokenNetworks::checked($networks);
-        $created = $user->createToken($name, $granted, $expiresAt);
-        $minted = $created instanceof NewAccessToken ? $created : throw new LogicException('createToken() answered something other than a NewAccessToken.');
-        $this->prefixes->record($minted);
+        $minted = $this->keys->mint($user, $name, $granted, $expiresAt);
         $this->networks->restrict($minted->accessToken, $limitedTo);
 
         return $minted;
@@ -308,7 +303,7 @@ final readonly class PersonalTokens
      */
     public function revoke(Request $request, int|string $tokenId, ?Model $tokenable = null): bool
     {
-        $token = $this->listFor($request, $tokenable)->first(static fn (Model $token): bool => TokenPrefixes::key($token->getKey()) === (string) $tokenId);
+        $token = $this->listFor($request, $tokenable)->first(static fn (Model $token): bool => Tokens::key($token->getKey()) === (string) $tokenId);
 
         if (! $token instanceof Model) {
             return false;
@@ -367,7 +362,7 @@ final readonly class PersonalTokens
         $revoked = $this->revocations->among($tokens);
 
         return $tokens
-            ->reject(fn (Model $token): bool => in_array(TokenPrefixes::key($token->getKey()), $revoked, true) || $this->catalog->holdsReserved(Tokens::abilitiesOf($token)) || ($live && Tokens::expired($token)))
+            ->reject(fn (Model $token): bool => in_array(Tokens::key($token->getKey()), $revoked, true) || $this->catalog->holdsReserved(Tokens::abilitiesOf($token)) || ($live && Tokens::expired($token)))
             ->values();
     }
 
@@ -428,7 +423,7 @@ final readonly class PersonalTokens
     private function spent(Request $request, int $confirmedAt): string
     {
         $user = $request->user();
-        $holder = $user instanceof Model ? $user->getMorphClass().':'.TokenPrefixes::key($user->getKey()) : '';
+        $holder = $user instanceof Model ? $user->getMorphClass().':'.Tokens::key($user->getKey()) : '';
 
         return 'sanctum-hardening:confirmation-spent:'.$holder.':'.$confirmedAt;
     }
@@ -457,7 +452,7 @@ final readonly class PersonalTokens
             return false;
         }
 
-        $attempts = 'sanctum-hardening:confirm:'.$user->getMorphClass().':'.TokenPrefixes::key($user->getKey());
+        $attempts = 'sanctum-hardening:confirm:'.$user->getMorphClass().':'.Tokens::key($user->getKey());
 
         // The count the increment answers is this attempt's own, however many arrive at once.
         if ($this->limiter->hit($attempts, 60) > self::CONFIRM_ATTEMPTS) {

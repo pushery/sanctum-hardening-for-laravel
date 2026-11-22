@@ -59,4 +59,14 @@ final class Tokens
 
         return is_array($abilities) ? $abilities : [];
     }
+
+    /**
+     * A token's or a user's key as the string the package's tables store it under.
+     *
+     * @param  mixed  $key  the key as the model holds it, an integer or a string by the type of the key
+     */
+    public static function key(mixed $key): string
+    {
+        return is_scalar($key) ? (string) $key : '';
+    }
 }

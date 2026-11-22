@@ -6,7 +6,10 @@ namespace Pushery\SanctumHardening\Throttling;
 
 use Illuminate\Database\Eloquent\Model;
 
-/** The default: the quickstart names the limits the package's limiter counts with, the same for every tokenable. */
+/**
+ * The default: the quickstart names the limits the package's limiter counts the tokenable with, from its tier. A tier
+ * without a counter for the tokens or for their holder leaves that part of the sentence out.
+ */
 final readonly class ThrottleQuickstartLimits implements ResolvesQuickstartLimits
 {
     public function __construct(
@@ -15,7 +18,9 @@ final readonly class ThrottleQuickstartLimits implements ResolvesQuickstartLimit
 
     public function limitsFor(Model $tokenable): QuickstartLimits
     {
-        return $this->limits();
+        $tier = $this->throttle->tierFor($tokenable);
+
+        return new QuickstartLimits($tier->perToken?->perMinute, $tier->perHolder?->perMinute);
     }
 
     /** The limits of the package's limiter, which needs no tokenable to name them. */

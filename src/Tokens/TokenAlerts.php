@@ -41,7 +41,7 @@ final readonly class TokenAlerts
     public function __construct(
         private Repository $config,
         private AbilityCatalog $catalog,
-        private TokenPrefixes $prefixes,
+        private KeyIds $keyIds,
         private ResolvesTokenAlerts $resolver,
         private ExceptionHandler $exceptions,
     ) {}
@@ -96,12 +96,12 @@ final readonly class TokenAlerts
      */
     public function forget(mixed $tokenKey): void
     {
-        DB::table(self::TABLE)->where('token_id', TokenPrefixes::key($tokenKey))->delete();
+        DB::table(self::TABLE)->where('token_id', Tokens::key($tokenKey))->delete();
     }
 
     /**
      * Forget the alerts of tokens that no longer exist, and say of how many tokens, the way
-     * TokenPrefixes::prune() forgets their prefixes.
+     * KeyIds::prune() forgets their identifiers.
      */
     public function prune(int $chunk = 500): int
     {
@@ -112,7 +112,7 @@ final readonly class TokenAlerts
         // By key rather than by offset, so the rows deleted on the way make the walk skip none.
         foreach (DB::table(self::TABLE)->select(['id', 'token_id'])->lazyById($size)->chunk($size) as $rows) {
             $keys = array_values(array_unique(array_filter($rows->pluck('token_id')->all(), is_string(...))));
-            $existing = array_map(TokenPrefixes::key(...), $model->newQuery()->whereIn($model->getKeyName(), $keys)->pluck($model->getKeyName())->all());
+            $existing = array_map(Tokens::key(...), $model->newQuery()->whereIn($model->getKeyName(), $keys)->pluck($model->getKeyName())->all());
             $gone = array_values(array_diff($keys, $existing));
 
             if ($gone !== []) {
@@ -138,12 +138,12 @@ final readonly class TokenAlerts
         $size = max(1, $chunk);
 
         foreach ($due->with('tokenable')->lazyById($size)->chunk($size) as $tokens) {
-            $keys = $tokens->map(static fn (Model $token): string => TokenPrefixes::key($token->getKey()))->values()->all();
+            $keys = $tokens->map(static fn (Model $token): string => Tokens::key($token->getKey()))->values()->all();
             $mailed = DB::table(self::TABLE)->where('kind', $kind)->whereIn('token_id', $keys)->pluck('occasion_at', 'token_id')->all();
-            $prefixes = $this->prefixes->of($tokens);
+            $prefixes = $this->keyIds->of($tokens);
 
             foreach ($tokens as $token) {
-                $key = TokenPrefixes::key($token->getKey());
+                $key = Tokens::key($token->getKey());
                 $occasion = $this->occasionOf($kind, $token);
 
                 if (! $occasion instanceof DateTimeImmutable || $this->catalog->holdsReserved(Tokens::abilitiesOf($token)) || $this->sameMoment($mailed[$key] ?? null, $occasion)) {

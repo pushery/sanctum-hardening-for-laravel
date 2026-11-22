@@ -42,12 +42,12 @@ final readonly class TokenRevocations
             // The record is keyed by the token, so the insert of a second revocation finds the first record and
             // writes nothing, rather than failing on the key, and the token keeps the expiry it was given then.
             $recorded = DB::table(self::TABLE)->insertOrIgnore([
-                'token_id' => TokenPrefixes::key($token->getKey()),
+                'token_id' => Tokens::key($token->getKey()),
                 'token_name' => mb_substr(self::text($token->getAttribute('name')), 0, Builder::$defaultStringLength),
                 'tokenable_type' => self::text($token->getAttribute('tokenable_type')),
-                'tokenable_id' => TokenPrefixes::key($token->getAttribute('tokenable_id')),
+                'tokenable_id' => Tokens::key($token->getAttribute('tokenable_id')),
                 'revoked_by_type' => $by?->getMorphClass(),
-                'revoked_by_id' => $by instanceof Model ? TokenPrefixes::key($by->getKey()) : null,
+                'revoked_by_id' => $by instanceof Model ? Tokens::key($by->getKey()) : null,
                 'revoked_at' => Moments::bound($now),
             ]) > 0;
 
@@ -71,7 +71,7 @@ final readonly class TokenRevocations
         $keys = [];
 
         foreach ($tokens as $token) {
-            $keys[] = TokenPrefixes::key($token->getKey());
+            $keys[] = Tokens::key($token->getKey());
         }
 
         return array_values(array_filter(DB::table(self::TABLE)->whereIn('token_id', $keys)->pluck('token_id')->all(), is_string(...)));
@@ -86,11 +86,14 @@ final readonly class TokenRevocations
     {
         $revocations = [];
 
+        // The identifier of a revoked token stays as long as this record does, see KeyIds, so the join finds the
+        // key's prefix after Sanctum pruned the token itself. Both keys are strings, so the join compares like with like.
         $rows = DB::table(self::TABLE)
-            ->where('tokenable_type', $tokenable->getMorphClass())
-            ->where('tokenable_id', TokenPrefixes::key($tokenable->getKey()))
-            ->orderByDesc('revoked_at')
-            ->get();
+            ->leftJoin(KeyIds::TABLE, KeyIds::TABLE.'.token_id', '=', self::TABLE.'.token_id')
+            ->where(self::TABLE.'.tokenable_type', $tokenable->getMorphClass())
+            ->where(self::TABLE.'.tokenable_id', Tokens::key($tokenable->getKey()))
+            ->orderByDesc(self::TABLE.'.revoked_at')
+            ->get([self::TABLE.'.*', KeyIds::TABLE.'.prefix as key_prefix']);
 
         foreach ($rows as $row) {
             $revocations[] = new TokenRevocation(
@@ -101,6 +104,7 @@ final readonly class TokenRevocations
                 is_string($row->revoked_by_type ?? null) ? $row->revoked_by_type : null,
                 is_string($row->revoked_by_id ?? null) ? $row->revoked_by_id : null,
                 new DateTimeImmutable(self::text($row->revoked_at ?? null)),
+                is_string($row->key_prefix ?? null) ? $row->key_prefix : null,
             );
         }
 
@@ -108,7 +112,7 @@ final readonly class TokenRevocations
     }
 
     /**
-     * Delete the tokens revoked more than `$days` days ago, with their records, their prefixes, their
+     * Delete the tokens revoked more than `$days` days ago, with their records, their identifiers, their
      * networks and their alerts, and say how many.
      *
      * The tokens are deleted by key through the token model rather than joined, because a record's key
@@ -126,7 +130,7 @@ final readonly class TokenRevocations
             $keys = array_values(array_filter($rows->pluck('token_id')->all(), is_string(...)));
 
             $model->newQuery()->whereIn($model->getKeyName(), $keys)->delete();
-            DB::table(TokenPrefixes::TABLE)->whereIn('token_id', $keys)->delete();
+            DB::table(KeyIds::TABLE)->whereIn('token_id', $keys)->delete();
             DB::table(TokenNetworks::TABLE)->whereIn('token_id', $keys)->delete();
             DB::table(TokenAlerts::TABLE)->whereIn('token_id', $keys)->delete();
             DB::table(TokenRotations::TABLE)->whereIn('token_id', $keys)->delete();
