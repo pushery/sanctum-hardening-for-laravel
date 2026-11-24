@@ -9,6 +9,7 @@ use Illuminate\Contracts\Console\Isolatable;
 use Pushery\SanctumHardening\Tokens\TokenAlerts;
 use Pushery\SanctumHardening\Tokens\Tokens;
 use Symfony\Component\Console\Attribute\AsCommand;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Mail the holder of each token that expires soon or has gone unused, once for the same expiry and the
@@ -37,24 +38,24 @@ final class SendAlertsCommand extends Command implements Isolatable
     {
         $sent = $alerts->send();
 
-        $this->components->info(sprintf('Sent %s and %s.', $this->count($sent['expiring'], 'expiry alert'), $this->count($sent['inactive'], 'inactivity alert')));
+        $this->components->info(OutputFormatter::escape(sprintf('Sent %s and %s.', $this->count($sent['expiring'], 'expiry alert'), $this->count($sent['inactive'], 'inactivity alert'))));
 
         if ($alerts->enabled(TokenAlerts::INACTIVE) && ! Tokens::lastUseIsRecorded()) {
             $this->components->warn('Sent no inactivity alert: Sanctum writes no last use while sanctum.last_used_at is off, so a token used yesterday reads as one never used. Switch the alert off with sanctum-hardening.alerts.inactive.enabled, or let Sanctum write the last use.');
         }
 
         if ($sent['unreachable'] > 0) {
-            $this->components->warn($sent['unreachable'] === 1 ? 'Skipped 1 token whose holder receives no mail.' : "Skipped {$sent['unreachable']} tokens whose holders receive no mail.");
+            $this->components->warn(OutputFormatter::escape($sent['unreachable'] === 1 ? 'Skipped 1 token whose holder receives no mail.' : "Skipped {$sent['unreachable']} tokens whose holders receive no mail."));
         }
 
         if ($sent['unlinked'] > 0) {
-            $this->components->error(($sent['unlinked'] === 1 ? 'Skipped 1 token without a page to revoke it on.' : "Skipped {$sent['unlinked']} tokens without a page to revoke them on.").' Name the page in sanctum-hardening.alerts.link.');
+            $this->components->error(OutputFormatter::escape(($sent['unlinked'] === 1 ? 'Skipped 1 token without a page to revoke it on.' : "Skipped {$sent['unlinked']} tokens without a page to revoke them on.").' Name the page in sanctum-hardening.alerts.link.'));
         }
 
         if ($sent['failed'] > 0) {
-            $this->components->error($sent['failed'] === 1
+            $this->components->error(OutputFormatter::escape($sent['failed'] === 1
                 ? 'Could not send 1 mail; its exception went to the exception handler, and the next run tries it again.'
-                : "Could not send {$sent['failed']} mails; their exceptions went to the exception handler, and the next run tries them again.");
+                : "Could not send {$sent['failed']} mails; their exceptions went to the exception handler, and the next run tries them again."));
         }
 
         return $sent['unlinked'] > 0 || $sent['failed'] > 0 ? self::FAILURE : self::SUCCESS;

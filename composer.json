@@ -62,10 +62,11 @@
     "pestphp/pest-plugin-evals": "^5.1",
     "pestphp/pest-plugin-laravel": "^5.0",
     "pestphp/pest-plugin-phpstan": "^5.0",
-    "pestphp/pest-plugin-type-coverage": "^5.0",
-    "phpstan/phpstan": "2.3.5",
+    "pestphp/pest-plugin-type-coverage": "^5.1.1",
+    "phpstan/phpstan": "^2.3.5",
     "phpstan/phpstan-deprecation-rules": "^2.0.5",
-    "pushery/sqlens-for-laravel": "^0.35.0",
+    "pushery/http-api-for-laravel": "^0.5.0",
+    "pushery/sqlens-for-laravel": "^0.35.1",
     "pushery/wirekit": "^2.73.0",
     "rector/rector": "^2.7.0",
     "spaze/phpstan-disallowed-calls": "^4.12",
@@ -73,6 +74,7 @@
   },
   "suggest": {
     "livewire/livewire": "Required for the optional self-service screen of personal access tokens, the Livewire component sanctum-hardening.tokens.",
+    "pushery/http-api-for-laravel": "Answers a request over a limit of the throttle with its JSON:API error rate_limited, from 0.4.0 on, where it answers the errors of the request. Without it, the throttle answers with a problem document.",
     "pushery/wirekit": "Renders the self-service screen with WireKit components, from WireKit 2.67.0 on. Without it, with an older WireKit, or with sanctum-hardening.ui.variant set to plain, the screen renders its plain Blade view, which a host on another UI kit publishes and restyles."
   },
   "autoload": {

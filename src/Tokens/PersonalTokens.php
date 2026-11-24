@@ -243,7 +243,17 @@ final readonly class PersonalTokens
                 throw MintRefused::passwordNotConfirmed();
             }
 
-            $minted = $this->keys->mint($tokenable, $name, $granted, $expiresAt);
+            try {
+                $minted = $this->keys->mint($tokenable, $name, $granted, $expiresAt);
+            } catch (MintRefused $refusal) {
+                // A mint that Keys refuses, the tokenable's own refusal among them, writes nothing, so it
+                // leaves the confirmation for the next mint, as every refusal before it does.
+                if ($this->confirmsEachMint()) {
+                    Cache::forget($this->spent($request, $this->confirmedAt($request) ?? 0));
+                }
+
+                throw $refusal;
+            }
 
             // Only a token that was minted counts against the minute, so a refused request costs nothing.
             $this->limiter->hit($holder, 60);

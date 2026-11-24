@@ -10,6 +10,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Facades\Route;
 use Pushery\SanctumHardening\Http\EnsureApiIsEnabled;
 use Pushery\SanctumHardening\Http\RecordsTokenUse;
+use Pushery\SanctumHardening\Tokens\Tokens;
 
 /**
  * The API of an application, behind Sanctum's token guard and the package's throttle, and the switch
@@ -24,6 +25,19 @@ final class SanctumHardening
 {
     /** The middleware the routes run behind where the settings name none. */
     private const array SHIPPED_MIDDLEWARE = ['api', 'auth:sanctum'];
+
+    /**
+     * A token's or a holder's key as the string the package's tables store it under, in `token_id`,
+     * `tokenable_id`, `revoked_by_id` and `rotated_by_id`, so an application finds the rows of an account
+     * or a workspace for an export or a deletion. A key that is no scalar gives an empty string, which no
+     * row carries.
+     *
+     * @param  mixed  $key  the key as a model gives it, an int, a string or whatever a custom key type returns
+     */
+    public static function storedKey(mixed $key): string
+    {
+        return Tokens::key($key);
+    }
 
     /**
      * The guards Sanctum asks for a signed-in user before it reads a bearer token: the names in

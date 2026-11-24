@@ -220,6 +220,9 @@ use Pushery\SanctumHardening\SanctumHardening;
   in the self-service.
 - Minting a workspace's token for the owner or through `mintForSystem()`: the first ends when the
   owner leaves, the second skips the limits and the password. `mintFor()` keeps both.
+- Refusing a new token in an override of `createToken()`: the package writes keys itself and calls
+  no `createToken()`, so the self-service, `mintFor()`, `mintForSystem()` and a rotation pass the
+  override by. Implement `RefusesNewTokens` on the model, which every way to a token asks.
 - Keeping `cache.limiter` or the default store on a store that loses keys before their time: a Redis
   whose `maxmemory-policy` is anything but `noeviction` or that runs without `appendonly yes`, or
   Memcached. A lost count gives a holder a fresh minute of mints and of wrong passwords, and a lost

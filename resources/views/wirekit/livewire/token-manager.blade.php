@@ -99,7 +99,10 @@
 
                     {{-- No tableLabel: the section is the screen's landmark and carries its name, and a table named the same would
                          be a second landmark under that name. WireKit keeps the table's scroller reachable by keyboard without one. --}}
-                    <x-wirekit::table>
+                    {{-- Stacked below md, each token a card of its own: six columns are wider than a phone, and the
+                         buttons of a token stood outside the screen. WireKit stacks from 2.70.0 on; an older WireKit
+                         takes the attribute as an attribute and keeps the table. --}}
+                    <x-wirekit::table stack-below="md">
                         <x-wirekit::table.head>
                             <x-wirekit::table.row>
                                 <x-wirekit::table.th>{{ $lang->get('sanctum-hardening::messages.screen.name') }}</x-wirekit::table.th>
@@ -136,18 +139,22 @@
                                             <x-wirekit::list type="none" :items="$uses[(string) $token->getKey()]" :aria-label="$lang->get('sanctum-hardening::messages.screen.recent')" />
                                         @endif
                                     </x-wirekit::table.td>
-                                    <x-wirekit::table.td>
-                                        @if (in_array((string) $token->getKey(), $rotatable, true))
-                                            {{-- wire:confirm keeps the question the button was drawn with, so the button is keyed by the
-                                                 overlap and drawn anew once another one is chosen. --}}
-                                            <x-wirekit::button type="button" wire:key="rotate-{{ $token->getKey() }}-{{ $overlapHours }}" wire:click="rotate('{{ $token->getKey() }}')" wire:confirm="{{ $lang->get('sanctum-hardening::messages.screen.confirm_rotate', ['hours' => $overlapHours, 'overlap' => $duration($overlapHours)]) }}" aria-label="{{ $lang->get('sanctum-hardening::messages.screen.rotate_named', ['name' => $token->getAttribute('name')]) }}" data-sanctum-hardening-rotate="{{ $token->getKey() }}">
-                                                {{ $lang->get('sanctum-hardening::messages.screen.rotate') }}
+                                    <x-wirekit::table.td actions>
+                                        {{-- A row that wraps: in a narrow last column the two buttons go onto two lines and keep the
+                                             same gap between them as side by side. --}}
+                                        <x-wirekit::row gap="sm" wrap>
+                                            @if (in_array((string) $token->getKey(), $rotatable, true))
+                                                {{-- wire:confirm keeps the question the button was drawn with, so the button is keyed by the
+                                                     overlap and drawn anew once another one is chosen. --}}
+                                                <x-wirekit::button type="button" wire:key="rotate-{{ $token->getKey() }}-{{ $overlapHours }}" wire:click="rotate('{{ $token->getKey() }}')" wire:confirm="{{ $lang->get('sanctum-hardening::messages.screen.confirm_rotate', ['hours' => $overlapHours, 'overlap' => $duration($overlapHours)]) }}" aria-label="{{ $lang->get('sanctum-hardening::messages.screen.rotate_named', ['name' => $token->getAttribute('name')]) }}" data-sanctum-hardening-rotate="{{ $token->getKey() }}">
+                                                    {{ $lang->get('sanctum-hardening::messages.screen.rotate') }}
+                                                </x-wirekit::button>
+                                            @endif
+                                            {{-- Marked with its token: once a token is revoked, the focus moves to the button of the one beside it. --}}
+                                            <x-wirekit::button type="button" intent="danger" wire:click="revoke('{{ $token->getKey() }}')" wire:confirm="{{ $lang->get('sanctum-hardening::messages.screen.confirm_revoke') }}" aria-label="{{ $lang->get('sanctum-hardening::messages.screen.revoke_named', ['name' => $token->getAttribute('name')]) }}" data-sanctum-hardening-revoke="{{ $token->getKey() }}">
+                                                {{ $lang->get('sanctum-hardening::messages.screen.revoke') }}
                                             </x-wirekit::button>
-                                        @endif
-                                        {{-- Marked with its token: once a token is revoked, the focus moves to the button of the one beside it. --}}
-                                        <x-wirekit::button type="button" intent="danger" wire:click="revoke('{{ $token->getKey() }}')" wire:confirm="{{ $lang->get('sanctum-hardening::messages.screen.confirm_revoke') }}" aria-label="{{ $lang->get('sanctum-hardening::messages.screen.revoke_named', ['name' => $token->getAttribute('name')]) }}" data-sanctum-hardening-revoke="{{ $token->getKey() }}">
-                                            {{ $lang->get('sanctum-hardening::messages.screen.revoke') }}
-                                        </x-wirekit::button>
+                                        </x-wirekit::row>
                                     </x-wirekit::table.td>
                                 </x-wirekit::table.row>
                             @empty

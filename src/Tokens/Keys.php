@@ -34,11 +34,12 @@ final readonly class Keys
     public function __construct(private Repository $config, private KeyIds $ids, private ?Closure $draw = null) {}
 
     /**
-     * Mint a token for a model that uses Sanctum's `HasApiTokens`, with a key in the key format.
+     * Mint a token for a model that uses Sanctum's `HasApiTokens`, with a key in the key format. A model that
+     * implements RefusesNewTokens is asked first, before anything is written.
      *
      * @param  array<array-key, mixed>  $abilities
      *
-     * @throws MintRefused where the model holds no tokens
+     * @throws MintRefused where the model holds no tokens, or refuses a new one
      * @throws InvalidArgumentException where `keys.product` or `keys.environment` is set to something a key cannot name
      */
     public function mint(Model $tokenable, string $name, array $abilities = ['*'], ?DateTimeInterface $expiresAt = null): NewAccessToken
@@ -47,6 +48,14 @@ final readonly class Keys
 
         if (! $tokens instanceof MorphMany) {
             throw MintRefused::notTokenable();
+        }
+
+        if ($tokenable instanceof RefusesNewTokens) {
+            $refusal = $tokenable->refusalOfANewToken($name, $abilities, $expiresAt);
+
+            if ($refusal !== null) {
+                throw MintRefused::refusedByTheHolder($refusal);
+            }
         }
 
         $product = $this->product();
