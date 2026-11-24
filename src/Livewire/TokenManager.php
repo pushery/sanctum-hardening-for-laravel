@@ -407,8 +407,8 @@ final class TokenManager extends Component
     }
 
     /**
-     * What the line of a refused mint puts in for its placeholders: the entry of the networks it refused, and the
-     * limit it met.
+     * What the line of a refused mint puts in for its placeholders: the entry of the networks it refused, the limit
+     * it met, and the sentence of a holder that refuses a new token.
      *
      * @return array<string, string>
      */
@@ -422,6 +422,10 @@ final class TokenManager extends Component
 
         if ($refusal->limit !== null) {
             $placeholders['limit'] = (string) $refusal->limit;
+        }
+
+        if ($refusal->refusal !== null) {
+            $placeholders['refusal'] = $refusal->refusal;
         }
 
         return $placeholders;

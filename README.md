@@ -140,11 +140,12 @@ $request = request(); // the request of the signed-in user who mints the token
 $minted = app(PersonalTokens::class)->mint($request, 'CI', ['orders:read'], 90);
 ```
 
-A token is minted behind a password confirmed a moment ago, at most 20 per user and 5 a minute,
-one at a time, with a lifetime from a list. `mintFor($request, $workspace, …)` mints a token that
+A token is minted behind a password confirmed a moment ago, at most 20 per user and 5 a minute, one
+at a time, with a lifetime from a list. `mintFor($request, $workspace, …)` mints a token that
 belongs to a workspace under the same rules, where the application's Gate lets the user manage its
-tokens. Every mint takes the addresses and networks a token may be used from as its last argument,
-and a request from anywhere else is refused like an unknown token. See
+tokens. A model that implements `RefusesNewTokens` refuses a new token with a sentence of its own.
+Every mint takes the addresses and networks a token may be used from as its last argument, and a
+request from anywhere else is refused like an unknown token. See
 [Minting](https://docs.pushery.com/sanctum-hardening-for-laravel/minting).
 
 ### Throttling and the switch
@@ -168,7 +169,8 @@ Registered there, outside the group Laravel puts around `routes/api.php`, the ro
 prefix `api` applies twice.
 
 The API runs behind a limit per token and one per user over all of their tokens, and answers
-`429` as a problem document. `SANCTUM_HARDENING_ENABLED=false` removes its routes altogether. A
+`429` as a problem document, or as the JSON:API error `rate_limited` where
+`pushery/http-api-for-laravel` answers the errors of the request. `SANCTUM_HARDENING_ENABLED=false` removes its routes altogether. A
 route the route cache still holds answers `404` from the next request on, and with a cached
 configuration the switch takes effect once `php artisan optimize` caches the configuration and
 then the routes again. The last use of a token is written once a minute instead of on every

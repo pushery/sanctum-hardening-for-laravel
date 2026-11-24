@@ -11,6 +11,7 @@ use Pushery\SanctumHardening\Tokens\TokenAlerts;
 use Pushery\SanctumHardening\Tokens\TokenNetworks;
 use Pushery\SanctumHardening\Tokens\TokenRotations;
 use Symfony\Component\Console\Attribute\AsCommand;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Forget the key prefixes and identifiers, the networks, the alerts and the rotations of tokens that are gone:
@@ -41,10 +42,10 @@ final class PrunePrefixesCommand extends Command implements Isolatable
         $mailed = $alerts->prune();
         $replaced = $rotations->prune();
 
-        $this->components->info($pruned === 1 ? 'Forgot the prefix of 1 deleted token.' : "Forgot the prefixes of {$pruned} deleted tokens.");
-        $this->components->info($limits === 1 ? 'Forgot the networks of 1 deleted token.' : "Forgot the networks of {$limits} deleted tokens.");
-        $this->components->info($mailed === 1 ? 'Forgot the alerts of 1 deleted token.' : "Forgot the alerts of {$mailed} deleted tokens.");
-        $this->components->info($replaced === 1 ? 'Forgot the rotation of 1 deleted token.' : "Forgot the rotations of {$replaced} deleted tokens.");
+        $this->components->info(OutputFormatter::escape($pruned === 1 ? 'Forgot the prefix of 1 deleted token.' : "Forgot the prefixes of {$pruned} deleted tokens."));
+        $this->components->info(OutputFormatter::escape($limits === 1 ? 'Forgot the networks of 1 deleted token.' : "Forgot the networks of {$limits} deleted tokens."));
+        $this->components->info(OutputFormatter::escape($mailed === 1 ? 'Forgot the alerts of 1 deleted token.' : "Forgot the alerts of {$mailed} deleted tokens."));
+        $this->components->info(OutputFormatter::escape($replaced === 1 ? 'Forgot the rotation of 1 deleted token.' : "Forgot the rotations of {$replaced} deleted tokens."));
 
         return self::SUCCESS;
     }

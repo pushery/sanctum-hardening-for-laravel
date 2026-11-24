@@ -9,6 +9,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Console\Isolatable;
 use Pushery\SanctumHardening\Tokens\TokenUses;
 use Symfony\Component\Console\Attribute\AsCommand;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Delete the recorded uses of tokens older than `sanctum-hardening.usage.keep_days`. Schedule it daily.
@@ -36,7 +37,7 @@ final class PruneUsesCommand extends Command implements Isolatable
         $days = is_int($setting) && $setting >= 1 ? $setting : 30;
         $pruned = $uses->prune($days);
 
-        $this->components->info($pruned === 1 ? "Deleted 1 use older than {$days} days." : "Deleted {$pruned} uses older than {$days} days.");
+        $this->components->info(OutputFormatter::escape($pruned === 1 ? "Deleted 1 use older than {$days} days." : "Deleted {$pruned} uses older than {$days} days."));
 
         return self::SUCCESS;
     }

@@ -4,6 +4,29 @@ All notable changes to `pushery/sanctum-hardening-for-laravel` are documented he
 
 A release carries only the sections that have an entry, in this order: `### ⚠️ Breaking`, `### ✨ Added`, `### 🔧 Changed`, `### ⚡ Performance`, `### 🐛 Fixed`, `### 🔒 Security`, `### 🧹 Deprecated`, `### 🗑️ Removed` and `### 📚 Documentation`.
 
+## [0.9.0] - 2026-11-24
+
+### ✨ Added
+
+- **An export or a deletion of an account finds its rows in the package's tables through a public method.** `SanctumHardening::storedKey()` gives a token's or a holder's key as the string the tables store it under, in `token_id`, `tokenable_id`, `revoked_by_id` and `rotated_by_id`. **Upgrade:** it replaces `TokenPrefixes::key()`, which 0.8.0 removed while its successor stayed internal.
+- **A model that holds tokens can refuse a new one, on every way to a token.** A model that implements `RefusesNewTokens` is asked before a token is written, by `mint()`, `mintFor()` and `mintForSystem()` of `PersonalTokens`, by a rotation, by the screen and by `createToken()` of `HasApiKeys`, with the name, the abilities and the expiry of the new token. A sentence it returns refuses the token as a `MintRefused` with the reason `refused_by_holder` and the sentence in `refusal`, and the screen shows the sentence. A refused token costs neither the minute nor the confirmation of a password that covers one mint. **Upgrade:** since 0.8.0 the package writes a key itself and calls no `createToken()` of the model, so an override of `createToken()` that refuses a token refuses only the calls of the application's own code. Such a refusal moves into `refusalOfANewToken()`.
+
+### 🔧 Changed
+
+- **A token over its limit gets the JSON:API error `rate_limited` of http-api where that package answers the request.** With `pushery/http-api-for-laravel` installed and its errors switched on, a throttled request of the API is answered as an error document with the code `rate_limited`, `Retry-After` and the limit headers, the answer the gateway gives for the same limit. The package answered with a response of its own before, which a client of a JSON:API could not read as an error object. Without http-api, or on a request it does not answer, the response stays as it was.
+
+### 🐛 Fixed
+
+- **The list of tokens fits a phone in the WireKit view.** Below the `md` breakpoint it stacks each token into a card of its own, its Rotate and Revoke buttons at the foot. On a phone the abilities, the expiry, the last use and both buttons stood outside the screen, and the table scrolled sideways in its frame. WireKit stacks a table from 2.70.0 on, and an older one keeps the table as before.
+- **A token's Rotate and Revoke buttons keep their distance in the WireKit view.** In a narrow last column of the token list the two wrapped onto two lines and stood against each other. They now sit in a row with a gap, which they keep when they wrap.
+- **The commands print a token's name, its abilities and the values they read as they are written.** Symfony's console formatter read a part of a value that looks like a style tag, such as `<info>` or `</>`, as styling and dropped it: in the name or an ability of a token, a guard name, a time zone the database session reports, or a value of the configuration. `sanctum-hardening:doctor`, `sanctum-hardening:prune-prefixes`, `sanctum-hardening:prune-revocations`, `sanctum-hardening:prune-uses` and `sanctum-hardening:send-alerts` escape what they print.
+- **The days and hours a token has left read in the plural in a regional locale.** Each form of the lines for days and hours names its count, `{1} :count day|[2,*] :count days`, in all seven catalogs. Laravel picks a form without a count by the name of the locale, from a table that knows `de_AT` but no locale written with a hyphen, so an application on `de-AT` showed the singular for 30 days.
+
+### 📚 Documentation
+
+- **The documentation says that the `octane` store of Laravel Octane is out of the pruner's reach.** The store keeps an expired entry in a table of a fixed number of rows, `octane.cache.rows`, until its key is written again or the server restarts, and the scheduler, where the pruner runs, sees an empty store. Once the table is full, writing a new key fails, so the documentation advises against making `octane` the default cache store of an application that runs this package.
+- **The documentation of a token's networks and of the throttle says where a visitor can claim another address.** The minting page promised that a client cannot claim an address it does not send from, which holds from `laravel/framework` 13.43.0 on. Below it, an application that configures no trusted proxy and whose web server answers any host name takes a header the visitor sends as the mark of a Forge or Vapor proxy (GHSA-559m-v249-7qw2): a token limited to its networks then passes from any address the visitor claims, and a request nobody is signed in for starts a count of its own with each one. Both pages name the framework update, trusted proxies and a web server that answers only the application's host names as the ways to close it.
+
 ## [0.8.0] - 2026-11-22
 
 ### ⚠️ Breaking
@@ -209,7 +232,8 @@ A release carries only the sections that have an entry, in this order: `### ⚠�
 - **The prefixes of deleted tokens are pruned.** `sanctum-hardening:prune-prefixes` forgets the prefix of every token that no longer exists, the ones a query deleted included, as `sanctum:prune-expired` deletes them. Schedule it beside Sanctum's prune.
 - **The last use of a token written once a minute.** Sanctum's write of `last_used_at` on every request goes through once every `last_used_at.every` seconds.
 
-[Unreleased]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.5.0...v0.6.0

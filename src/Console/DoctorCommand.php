@@ -25,6 +25,7 @@ use Pushery\SanctumHardening\Tokens\TokenRevocations;
 use Pushery\SanctumHardening\Tokens\Tokens;
 use Pushery\SanctumHardening\Tokens\TokenUses;
 use Symfony\Component\Console\Attribute\AsCommand;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Reports the tokens minted outside the package: a `createToken()` with the wildcard, Sanctum's
@@ -92,7 +93,7 @@ final class DoctorCommand extends Command
             return true;
         }
 
-        $this->components->error('Sanctum asks the guard '.implode(', ', $guards)." for a session user before it reads a bearer token, and no route signs a client in over the session, so a raw remember cookie signs in to the API without the application key. Leave sanctum-hardening.session_guards empty, or sign the client in through Sanctum's statefulApi().");
+        $this->components->error(OutputFormatter::escape('Sanctum asks the guard '.implode(', ', $guards)." for a session user before it reads a bearer token, and no route signs a client in over the session, so a raw remember cookie signs in to the API without the application key. Leave sanctum-hardening.session_guards empty, or sign the client in through Sanctum's statefulApi()."));
 
         return false;
     }
@@ -150,7 +151,7 @@ final class DoctorCommand extends Command
 
         $zone = $connection->scalar('show timezone');
 
-        $this->components->warn("The database session runs in the time zone '".(is_string($zone) ? $zone : (string) $offset)."', the application in '".$application->getTimezone()->getName()."'. The package writes its own moments with their offset, so its tables hold them, and a moment stored without its offset keeps the shift between the two zones. Laravel writes every other moment without an offset, which the session reads in its own zone: set the timezone key of the connection in config/database.php to the application's zone.");
+        $this->components->warn(OutputFormatter::escape("The database session runs in the time zone '".(is_string($zone) ? $zone : (string) $offset)."', the application in '".$application->getTimezone()->getName()."'. The package writes its own moments with their offset, so its tables hold them, and a moment stored without its offset keeps the shift between the two zones. Laravel writes every other moment without an offset, which the session reads in its own zone: set the timezone key of the connection in config/database.php to the application's zone."));
     }
 
     /**
@@ -197,21 +198,21 @@ final class DoctorCommand extends Command
         }
 
         if ($wildcard === [] && $unknown === [] && $exposed === []) {
-            $this->components->info("All {$count} tokens carry abilities from the catalog.");
+            $this->components->info(OutputFormatter::escape("All {$count} tokens carry abilities from the catalog."));
 
             return true;
         }
 
         if ($wildcard !== []) {
-            $this->components->error(count($wildcard).' token(s) carry the wildcard, so every tokenCan() answers yes for them: '.implode(', ', $wildcard).'. Mint them again through the package with the abilities they need.');
+            $this->components->error(OutputFormatter::escape(count($wildcard).' token(s) carry the wildcard, so every tokenCan() answers yes for them: '.implode(', ', $wildcard).'. Mint them again through the package with the abilities they need.'));
         }
 
         if ($unknown !== []) {
-            $this->components->error(count($unknown).' token(s) carry an ability the catalog does not know: '.implode(', ', $unknown).'. Add the ability to the catalog, or mint the tokens again.');
+            $this->components->error(OutputFormatter::escape(count($unknown).' token(s) carry an ability the catalog does not know: '.implode(', ', $unknown).'. Add the ability to the catalog, or mint the tokens again.'));
         }
 
         if ($exposed !== []) {
-            $this->components->error(count($exposed).' token(s) are limited to networks, but Sanctum\'s authentication callback is no longer the one the package wrapped, so they are accepted from any address: '.implode(', ', $exposed).'. Set the application\'s callback in a service provider\'s boot(), where the package wraps it.');
+            $this->components->error(OutputFormatter::escape(count($exposed).' token(s) are limited to networks, but Sanctum\'s authentication callback is no longer the one the package wrapped, so they are accepted from any address: '.implode(', ', $exposed).'. Set the application\'s callback in a service provider\'s boot(), where the package wraps it.'));
         }
 
         return false;
@@ -266,7 +267,7 @@ final class DoctorCommand extends Command
             return true;
         }
 
-        $this->components->error('Nothing in the scheduler runs '.implode(', ', $missing).'. Schedule each of them daily, or name the ones your server runs outside the scheduler with --scheduled-elsewhere.');
+        $this->components->error(OutputFormatter::escape('Nothing in the scheduler runs '.implode(', ', $missing).'. Schedule each of them daily, or name the ones your server runs outside the scheduler with --scheduled-elsewhere.'));
 
         return false;
     }
@@ -334,12 +335,12 @@ final class DoctorCommand extends Command
         $kept = true;
 
         if (TableLookup::exists(TokenUses::TABLE) && DB::table(TokenUses::TABLE)->where('used_at', '<', Moments::bound(Date::now()->subDays($usage + 1)))->exists()) {
-            $this->components->error('Requests recorded more than '.($usage + 1)." days ago are still kept, past usage.keep_days of {$usage}, so sanctum-hardening:prune-uses has not run or has failed.");
+            $this->components->error(OutputFormatter::escape('Requests recorded more than '.($usage + 1)." days ago are still kept, past usage.keep_days of {$usage}, so sanctum-hardening:prune-uses has not run or has failed."));
             $kept = false;
         }
 
         if (TableLookup::exists(TokenRevocations::TABLE) && DB::table(TokenRevocations::TABLE)->where('revoked_at', '<', Moments::bound(Date::now()->subDays($revocations + 1)))->exists()) {
-            $this->components->error('Tokens revoked more than '.($revocations + 1)." days ago are still kept, past revocations.keep_days of {$revocations}, so sanctum-hardening:prune-revocations has not run or has failed.");
+            $this->components->error(OutputFormatter::escape('Tokens revoked more than '.($revocations + 1)." days ago are still kept, past revocations.keep_days of {$revocations}, so sanctum-hardening:prune-revocations has not run or has failed."));
             $kept = false;
         }
 

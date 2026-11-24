@@ -12,6 +12,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Pushery\HttpApi\Errors\ErrorRenderer;
+use Pushery\HttpApi\HttpApiServiceProvider;
 use Pushery\SanctumHardening\Tokens\Tokens;
 
 /**
@@ -21,7 +23,10 @@ use Pushery\SanctumHardening\Tokens\Tokens;
  * binds a ResolvesThrottleTier, and from `throttle.*` everywhere else.
  *
  * A request over a limit answers `429` as a problem document (RFC 9457) with `Retry-After`, whatever
- * the request asked for, because only an API client meets this limiter. A request nobody is signed
+ * the request asked for, because only an API client meets this limiter. Where pushery/http-api-for-laravel
+ * answers the errors of the request, the answer is that package's error `rate_limited` with the same
+ * headers, like every other error of the API. A write the tier allows none of stays a problem document
+ * either way: `rate_limited` names a wait, and waiting lets no write through. A request nobody is signed
  * in for is counted by its address, an IPv6 address by its /64, kept as a keyed hash: a rate
  * limiter's key is a cache key, and error trackers record cache keys.
  */
@@ -47,6 +52,9 @@ final readonly class TokenThrottle
             : 'address:'.hash_hmac('sha256', $this->counted((string) $request->ip()), $this->secret());
         $tier = $this->tierFor($user instanceof Model ? $user : null);
         $writes = ! $request->isMethodSafe();
+        // Where pushery/http-api-for-laravel answers the errors of the request, the limits carry no answer of their own,
+        // so Laravel's throttle throws its exception with the rate limit headers and that package answers it.
+        $itsOwn = ! $this->answeredByTheApiPackage($request);
         $seconds = [];
         $budgets = [];
         $minutes = [];
@@ -61,7 +69,7 @@ final readonly class TokenThrottle
             }
 
             if ($counter->perSecond !== null) {
-                $seconds[] = Limit::perSecond($counter->perSecond)->by('sanctum-hardening:second:'.$by)->response($this->tooMany(...));
+                $seconds[] = $this->answering(Limit::perSecond($counter->perSecond)->by('sanctum-hardening:second:'.$by), $itsOwn);
             }
 
             if ($writes && $counter->writesPerMinute !== null) {
@@ -70,10 +78,10 @@ final readonly class TokenThrottle
                     throw new HttpResponseException($this->writeRefused($request));
                 }
 
-                $budgets[] = Limit::perMinute($counter->writesPerMinute)->by('sanctum-hardening:writes:'.$by)->response($this->tooMany(...));
+                $budgets[] = $this->answering(Limit::perMinute($counter->writesPerMinute)->by('sanctum-hardening:writes:'.$by), $itsOwn);
             }
 
-            $minutes[] = $this->limit($counter->perMinute, $counter->burst)->by('sanctum-hardening:'.$by)->response($this->tooMany(...));
+            $minutes[] = $this->answering($this->limit($counter->perMinute, $counter->burst)->by('sanctum-hardening:'.$by), $itsOwn);
         }
 
         // Laravel's throttle asks every limit before it counts a request in any. Its Redis variant counts each limit as
@@ -136,6 +144,36 @@ final readonly class TokenThrottle
         }
 
         return new Limit('', $burst, (int) round($burst / $perMinute * 60));
+    }
+
+    /**
+     * The limit with the limiter's own answer to a request over it. Without one, Laravel's throttle throws its
+     * ThrottleRequestsException with the rate limit headers, which pushery/http-api-for-laravel answers.
+     */
+    private function answering(Limit $limit, bool $itsOwn): Limit
+    {
+        return $itsOwn ? $limit->response($this->tooMany(...)) : $limit;
+    }
+
+    /**
+     * Whether pushery/http-api-for-laravel answers the errors of this request, as it does from 0.4.0 on for a request of
+     * the API. Its provider, once loaded, hands its renderer to Laravel's exception handler, which asks the renderer
+     * under the two switches read here. The package is no requirement: where it is not installed, where its provider
+     * is not loaded, or where a switch turns its errors off, the limiter answers itself.
+     */
+    private function answeredByTheApiPackage(Request $request): bool
+    {
+        $application = Container::getInstance();
+
+        if (! class_exists(HttpApiServiceProvider::class) || ! method_exists($application, 'providerIsLoaded') || $application->providerIsLoaded(HttpApiServiceProvider::class) !== true) {
+            return false;
+        }
+
+        if ($this->config->get('http-api.enabled') === false || $this->config->get('http-api.errors.enabled') === false) {
+            return false;
+        }
+
+        return $application->make(ErrorRenderer::class)->answersWithErrors($request);
     }
 
     /**

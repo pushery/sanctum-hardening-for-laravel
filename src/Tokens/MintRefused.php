@@ -11,14 +11,16 @@ use RuntimeException;
  * of another tokenable, the password was not confirmed a moment ago, tokens are minted too fast or
  * the tokenable holds as many as allowed, the lifetime asked for is none of the allowed ones, the
  * name is empty or longer than a token's name may be, an entry of the networks a token is limited
- * to is no address and no network, or the networks are more than a token may be limited to.
+ * to is no address and no network, the networks are more than a token may be limited to, or the
+ * tokenable refuses a new token with a sentence of its own, see RefusesNewTokens.
  */
 final class MintRefused extends RuntimeException
 {
     /**
-     * @param  'not_tokenable'|'not_allowed'|'password_not_confirmed'|'too_fast'|'limit_reached'|'lifetime'|'name'|'network'|'too_many_networks'  $reason
+     * @param  'not_tokenable'|'not_allowed'|'password_not_confirmed'|'too_fast'|'limit_reached'|'lifetime'|'name'|'network'|'too_many_networks'|'refused_by_holder'  $reason
      * @param  int|null  $limit  the limit the mint met: the tokens a tokenable may hold, or the networks a token may be limited to
      * @param  string|null  $network  the entry of the networks that is no address and no network, as it was given
+     * @param  string|null  $refusal  the sentence a tokenable that refuses a new token gave, as it gave it
      */
     private function __construct(
         public readonly string $reason,
@@ -26,6 +28,7 @@ final class MintRefused extends RuntimeException
         public readonly ?int $retryAfter = null,
         public readonly ?int $limit = null,
         public readonly ?string $network = null,
+        public readonly ?string $refusal = null,
     ) {
         parent::__construct($message);
     }
@@ -68,6 +71,11 @@ final class MintRefused extends RuntimeException
     public static function tooManyNetworks(int $limit): self
     {
         return new self('too_many_networks', "A token can be limited to at most {$limit} addresses and networks.", limit: $limit);
+    }
+
+    public static function refusedByTheHolder(string $refusal): self
+    {
+        return new self('refused_by_holder', "The tokenable refuses a new token: {$refusal}", refusal: $refusal);
     }
 
     public static function lifetime(int $days): self

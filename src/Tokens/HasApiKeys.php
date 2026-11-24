@@ -24,9 +24,12 @@ trait HasApiKeys
     use HasApiTokens;
 
     /**
-     * Mint a token whose plain text is a key in the key format.
+     * Mint a token whose plain text is a key in the key format. A model that implements
+     * RefusesNewTokens is asked first, as on every other way to a token.
      *
      * @param  array<array-key, mixed>  $abilities
+     *
+     * @throws MintRefused where the model refuses the new token
      */
     public function createToken(string $name, array $abilities = ['*'], ?DateTimeInterface $expiresAt = null): NewAccessToken
     {
