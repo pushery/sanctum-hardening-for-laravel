@@ -223,6 +223,9 @@ use Pushery\SanctumHardening\SanctumHardening;
 - Refusing a new token in an override of `createToken()`: the package writes keys itself and calls
   no `createToken()`, so the self-service, `mintFor()`, `mintForSystem()` and a rotation pass the
   override by. Implement `RefusesNewTokens` on the model, which every way to a token asks.
+- Setting `keys.environment` to tell the keys of a test space from real ones: it names the
+  environment of every key of the application. Implement `NamesItsKeyEnvironment` on the model,
+  whose `keyEnvironment()` every way to a token asks.
 - Keeping `cache.limiter` or the default store on a store that loses keys before their time: a Redis
   whose `maxmemory-policy` is anything but `noeviction` or that runs without `appendonly yes`, or
   Memcached. A lost count gives a holder a fresh minute of mints and of wrong passwords, and a lost
