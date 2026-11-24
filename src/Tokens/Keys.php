@@ -40,7 +40,8 @@ final readonly class Keys
      * @param  array<array-key, mixed>  $abilities
      *
      * @throws MintRefused where the model holds no tokens, or refuses a new one
-     * @throws InvalidArgumentException where `keys.product` or `keys.environment` is set to something a key cannot name
+     * @throws InvalidArgumentException where `keys.product` or `keys.environment` is set to something a key cannot name,
+     *                                  or the model names an environment a key cannot name
      */
     public function mint(Model $tokenable, string $name, array $abilities = ['*'], ?DateTimeInterface $expiresAt = null): NewAccessToken
     {
@@ -59,7 +60,7 @@ final readonly class Keys
         }
 
         $product = $this->product();
-        $environment = $this->environment();
+        $environment = $this->environmentOf($tokenable);
 
         for ($attempt = 1; $attempt <= self::ATTEMPTS; $attempt++) {
             $key = KeyFormat::issue($product, $environment, null, $this->draw);
@@ -116,6 +117,25 @@ final readonly class Keys
         $letters = substr((string) preg_replace('/[^a-z]/', '', strtolower(is_string($name) ? $name : '')), 0, 10);
 
         return KeyFormat::isProduct($letters) ? $letters : 'app';
+    }
+
+    /**
+     * The environment the keys of the model name: the one it names where it is a NamesItsKeyEnvironment that
+     * names one, the environment of the application otherwise.
+     *
+     * @throws InvalidArgumentException where the model names an environment a key cannot name
+     */
+    private function environmentOf(Model $tokenable): string
+    {
+        $named = $tokenable instanceof NamesItsKeyEnvironment ? $tokenable->keyEnvironment() : null;
+
+        if ($named === null) {
+            return $this->environment();
+        }
+
+        return in_array($named, KeyFormat::ENVIRONMENTS, true)
+            ? $named
+            : throw new InvalidArgumentException(sprintf('%s names the key environment [%s], and a key names the environment live or test.', $tokenable::class, $named));
     }
 
     /**

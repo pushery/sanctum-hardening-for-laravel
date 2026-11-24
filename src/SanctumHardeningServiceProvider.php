@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Pushery\SanctumHardening;
 
+use Illuminate\Contracts\Auth\Factory as AuthFactory;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Contracts\Translation\Loader;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -21,6 +23,7 @@ use Pushery\SanctumHardening\Console\PrunePrefixesCommand;
 use Pushery\SanctumHardening\Console\PruneRevocationsCommand;
 use Pushery\SanctumHardening\Console\PruneUsesCommand;
 use Pushery\SanctumHardening\Console\SendAlertsCommand;
+use Pushery\SanctumHardening\Http\EnsureApiIsEnabled;
 use Pushery\SanctumHardening\Livewire\TokenManager;
 use Pushery\SanctumHardening\Support\LanguageFallbackLoader;
 use Pushery\SanctumHardening\Throttling\NoThrottleTier;
@@ -93,6 +96,18 @@ final class SanctumHardeningServiceProvider extends ServiceProvider
         if (class_exists(Livewire::class)) {
             Livewire::component('sanctum-hardening.tokens', TokenManager::class);
         }
+
+        // Laravel makes a guard the default one only once that guard knows the user, so a request the token
+        // guard turns away would leave the session guard of the application as the default. A reader that asks
+        // for the user at the end of the request, as an error tracker does, would then let that guard sign in
+        // the account a raw remember cookie names. The routes of the package make the token guard the default
+        // as soon as they match, before any of their middleware runs.
+        $app = $this->app;
+        Event::listen(RouteMatched::class, static function (RouteMatched $matched) use ($app): void {
+            if (in_array(EnsureApiIsEnabled::class, $matched->route->gatherMiddleware(), true)) {
+                $app->make(AuthFactory::class)->shouldUse('sanctum');
+            }
+        });
 
         if (self::$runsMigrations) {
             $this->loadMigrationsFrom(__DIR__.'/../database/migrations');

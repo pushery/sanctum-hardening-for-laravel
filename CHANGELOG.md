@@ -4,6 +4,20 @@ All notable changes to `pushery/sanctum-hardening-for-laravel` are documented he
 
 A release carries only the sections that have an entry, in this order: `### ⚠️ Breaking`, `### ✨ Added`, `### 🔧 Changed`, `### ⚡ Performance`, `### 🐛 Fixed`, `### 🔒 Security`, `### 🧹 Deprecated`, `### 🗑️ Removed` and `### 📚 Documentation`.
 
+## [0.10.0] - 2026-11-24
+
+### ✨ Added
+
+- **A model that holds tokens names the environment of its keys.** The environment in a key was the application's alone, `keys.environment` or `app.env`, so a key of a test space read `live` in production and nobody, person or secret scanner, could tell it from a real one. A model that implements `Tokens\NamesItsKeyEnvironment` answers `live` or `test` in `keyEnvironment()`, or `null` to leave it to the application, and every way to a new token asks it, the screen of tokens and `mintForSystem()` included.
+
+### 🔒 Security
+
+- **The token guard stays the default guard on the routes of the package after it turns a request away.** Laravel makes a guard the default one only once that guard knows the user, so a request without a valid token left the session guard of the application as the default. A reader that asks for the user at the end of the request, as Nightwatch does, then let that guard read the raw remember cookie of the request and sign in the account it names, with `Login` dispatched, while the response stayed a 401. The cookie takes the remember token and the password hash of the account, not the application key. The package now makes the token guard the default as soon as one of its routes matches.
+
+### 📚 Documentation
+
+- **The documentation says how a model that overrides `tokens()` builds Sanctum's relation under `HasApiKeys`.** An alias such as `use HasApiKeys { tokens as private tokensOfSanctum; }` reads as `mixed` to PHPStan, because `tokens()` comes from Sanctum's trait inside `HasApiKeys`, while the same alias on `HasApiTokens` kept its type. The Requirements show the form without an alias, `$this->morphMany(Sanctum::personalAccessTokenModel(), 'tokenable')`, as Sanctum's trait builds it.
+
 ## [0.9.0] - 2026-11-24
 
 ### ✨ Added
@@ -232,7 +246,8 @@ A release carries only the sections that have an entry, in this order: `### ⚠�
 - **The prefixes of deleted tokens are pruned.** `sanctum-hardening:prune-prefixes` forgets the prefix of every token that no longer exists, the ones a query deleted included, as `sanctum:prune-expired` deletes them. Schedule it beside Sanctum's prune.
 - **The last use of a token written once a minute.** Sanctum's write of `last_used_at` on every request goes through once every `last_used_at.every` seconds.
 
-[Unreleased]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.6.0...v0.7.0

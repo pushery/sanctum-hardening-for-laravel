@@ -143,7 +143,8 @@ $minted = app(PersonalTokens::class)->mint($request, 'CI', ['orders:read'], 90);
 A token is minted behind a password confirmed a moment ago, at most 20 per user and 5 a minute, one
 at a time, with a lifetime from a list. `mintFor($request, $workspace, …)` mints a token that
 belongs to a workspace under the same rules, where the application's Gate lets the user manage its
-tokens. A model that implements `RefusesNewTokens` refuses a new token with a sentence of its own.
+tokens. A model that implements `RefusesNewTokens` refuses a new token with a sentence of its own,
+and one that implements `NamesItsKeyEnvironment` names the environment of its keys, `live` or `test`.
 Every mint takes the addresses and networks a token may be used from as its last argument, and a
 request from anywhere else is refused like an unknown token. See
 [Minting](https://docs.pushery.com/sanctum-hardening-for-laravel/minting).
