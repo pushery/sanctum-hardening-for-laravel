@@ -28,7 +28,7 @@ there.
 
 ## Requirements
 
-- PHP 8.4+
+- PHP 8.4+ (tested on 8.4.27, 8.5.x and 8.6.x)
 - Laravel 13+
 - Laravel Sanctum 4, set up in the application
 
@@ -38,7 +38,7 @@ not set it up: `php artisan install:api` creates Sanctum's `personal_access_toke
 `Laravel\Sanctum\HasApiTokens` trait through the package's `HasApiKeys`, which makes `createToken()`
 hand out a key in the package's format as well.
 
-Tested on PostgreSQL and MySQL 8.4, the databases Laravel Cloud runs (serverless Postgres
+Tested on PostgreSQL 18.7 and MySQL 8.4.13, the databases Laravel Cloud runs (serverless Postgres
 and MySQL 8.4 LTS). The fast suite runs on SQLite.
 
 Tested on the floor of the declared PHP range, because a `>=` promise is only proven

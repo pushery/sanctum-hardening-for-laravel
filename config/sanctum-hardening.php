@@ -154,7 +154,10 @@ return [
     | The named limiter the API's routes run behind, in two stages: each token on its own,
     | and each user over all of their tokens. Without the second, a user gets past every
     | limit of a token by minting another one. A request over either answers `429` with
-    | `Retry-After`, as a problem document.
+    | `Retry-After`: as the JSON:API error `rate_limited` where pushery/http-api-for-laravel
+    | answers the errors of the request, and as a problem document everywhere else. A write
+    | the holder's tier allows none of is a problem document either way, since `rate_limited`
+    | names a wait and waiting lets no write through.
     |
     | A burst lets a holder that was quiet send more at once than its rate a minute: with
     | `per_token` 300 and `burst_per_token` 600, a token sends up to 600 in a window of two

@@ -117,7 +117,9 @@
                             @forelse ($tokens as $token)
                                 <x-wirekit::table.row wire:key="token-{{ $token->getKey() }}">
                                     <x-wirekit::table.td>{{ $token->getAttribute('name') }}</x-wirekit::table.td>
-                                    <x-wirekit::table.td><x-wirekit::code>{{ $prefixes[$token->getKey()] ?? '' }}</x-wirekit::code></x-wirekit::table.td>
+                                    {{-- In a block, so a long key breaks inside its cell where the table stacks its rows: a code that is
+                                         the cell's own item keeps the width of its unbroken word, and a key wider than the card ran out of it. --}}
+                                    <x-wirekit::table.td><div><x-wirekit::code>{{ $prefixes[$token->getKey()] ?? '' }}</x-wirekit::code></div></x-wirekit::table.td>
                                     <x-wirekit::table.td>
                                         {{ implode(', ', array_map(static fn (mixed $ability): string => is_string($ability) ? ($grantable[$ability] ?? $ability) : '', (array) $token->getAttribute('abilities'))) }}
                                         @if (($limits[(string) $token->getKey()] ?? []) !== [])
@@ -142,7 +144,7 @@
                                     <x-wirekit::table.td actions>
                                         {{-- A row that wraps: in a narrow last column the two buttons go onto two lines and keep the
                                              same gap between them as side by side. --}}
-                                        <x-wirekit::row gap="sm" wrap>
+                                        <x-wirekit::row gap="sm" wrap data-sanctum-hardening-actions>
                                             @if (in_array((string) $token->getKey(), $rotatable, true))
                                                 {{-- wire:confirm keeps the question the button was drawn with, so the button is keyed by the
                                                      overlap and drawn anew once another one is chosen. --}}
@@ -150,10 +152,24 @@
                                                     {{ $lang->get('sanctum-hardening::messages.screen.rotate') }}
                                                 </x-wirekit::button>
                                             @endif
-                                            {{-- Marked with its token: once a token is revoked, the focus moves to the button of the one beside it. --}}
-                                            <x-wirekit::button type="button" intent="danger" wire:click="revoke('{{ $token->getKey() }}')" wire:confirm="{{ $lang->get('sanctum-hardening::messages.screen.confirm_revoke') }}" aria-label="{{ $lang->get('sanctum-hardening::messages.screen.revoke_named', ['name' => $token->getAttribute('name')]) }}" data-sanctum-hardening-revoke="{{ $token->getKey() }}">
-                                                {{ $lang->get('sanctum-hardening::messages.screen.revoke') }}
-                                            </x-wirekit::button>
+                                            {{-- Revoking asks first, in the kit's question, and its confirmation revokes. The button that opens it
+                                                 is marked with its token: once a token is revoked, the focus moves to the button of the one beside it.
+                                                 The dialog closes on the confirmation and hands the focus back to that button before the row leaves,
+                                                 and `contents` lets the button stand in the row as the one beside it does. --}}
+                                            <x-wirekit::alert-dialog :name="'sanctum-hardening-revoke-'.$token->getKey()" close-on-confirm class="contents">
+                                                <x-slot:trigger>
+                                                    <x-wirekit::button type="button" intent="danger" aria-label="{{ $lang->get('sanctum-hardening::messages.screen.revoke_named', ['name' => $token->getAttribute('name')]) }}" data-sanctum-hardening-revoke="{{ $token->getKey() }}">
+                                                        {{ $lang->get('sanctum-hardening::messages.screen.revoke') }}
+                                                    </x-wirekit::button>
+                                                </x-slot:trigger>
+
+                                                <x-wirekit::alert-dialog.title>{{ $lang->get('sanctum-hardening::messages.screen.revoke_named', ['name' => $token->getAttribute('name')]) }}</x-wirekit::alert-dialog.title>
+                                                <x-wirekit::alert-dialog.description>{{ $lang->get('sanctum-hardening::messages.screen.confirm_revoke') }}</x-wirekit::alert-dialog.description>
+                                                <x-wirekit::alert-dialog.actions>
+                                                    <x-wirekit::alert-dialog.cancel />
+                                                    <x-wirekit::button type="button" intent="danger" data-wk-dialog-primary wire:click="revoke('{{ $token->getKey() }}')" data-sanctum-hardening-revoke-confirm="{{ $token->getKey() }}">{{ $lang->get('sanctum-hardening::messages.screen.revoke') }}</x-wirekit::button>
+                                                </x-wirekit::alert-dialog.actions>
+                                            </x-wirekit::alert-dialog>
                                         </x-wirekit::row>
                                     </x-wirekit::table.td>
                                 </x-wirekit::table.row>
