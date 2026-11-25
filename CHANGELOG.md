@@ -4,6 +4,22 @@ All notable changes to `pushery/sanctum-hardening-for-laravel` are documented he
 
 A release carries only the sections that have an entry, in this order: `### ⚠️ Breaking`, `### ✨ Added`, `### 🔧 Changed`, `### ⚡ Performance`, `### 🐛 Fixed`, `### 🔒 Security`, `### 🧹 Deprecated`, `### 🗑️ Removed` and `### 📚 Documentation`.
 
+## [0.11.0] - 2026-11-25
+
+### 🔧 Changed
+
+- **Revoking a token in the WireKit view asks in WireKit's alert dialog.** The Revoke button of a token opens the dialog, named by the token, and its confirmation revokes, where the button asked in the browser's own `confirm()` before. The focus still moves to the revoke button of the token beside it, and to the heading once none is left. The plain view keeps the browser's question.
+
+### 🐛 Fixed
+
+- **A long key prefix in the WireKit view breaks inside its cell on a phone, with WireKit 2.74.0.** Where the list stacks its tokens into cards, a code keeps the width of its word, so a key wider than the card ran out of it and the frame of the table scrolled sideways.
+- **A token over its limit gets the limiter's own `429` with an http-api older than 0.4.0, instead of a `500`.** The limiter asked whether the provider of `pushery/http-api-for-laravel` was loaded and then built that package's `ErrorRenderer`, which only 0.4.0 and later ship. With 0.3, every request behind the limiter failed. It now asks for the renderer it builds, and without it answers with its problem document, as it does without the package.
+
+### 📚 Documentation
+
+- **The requirements name the versions the package is tested on.** PHP 8.4.27, 8.5.x and 8.6.x, PostgreSQL 18.7 and MySQL 8.4.13, as the lanes run them, in the README and on the start page of the documentation.
+- **The comment on throttling in `config/sanctum-hardening.php` names both answers to a request over a limit.** It said a problem document alone. Where `pushery/http-api-for-laravel` answers the errors of the request, the answer is its JSON:API error `rate_limited`, and a write the holder's tier allows none of stays a problem document either way. An application that published the configuration before keeps the old comment in its own copy.
+
 ## [0.10.0] - 2026-11-24
 
 ### ✨ Added
@@ -246,7 +262,8 @@ A release carries only the sections that have an entry, in this order: `### ⚠�
 - **The prefixes of deleted tokens are pruned.** `sanctum-hardening:prune-prefixes` forgets the prefix of every token that no longer exists, the ones a query deleted included, as `sanctum:prune-expired` deletes them. Schedule it beside Sanctum's prune.
 - **The last use of a token written once a minute.** Sanctum's write of `last_used_at` on every request goes through once every `last_used_at.every` seconds.
 
-[Unreleased]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/pushery/sanctum-hardening-for-laravel/compare/v0.7.0...v0.8.0

@@ -32,9 +32,14 @@ use Pushery\SanctumHardening\Tokens\Tokens;
  */
 final readonly class TokenThrottle
 {
+    /**
+     * @param  string  $apiErrorRenderer  the class of pushery/http-api-for-laravel that renders the errors of the API, which
+     *                                    that package ships from 0.4.0 on; the limiter asks it only where the class exists
+     */
     public function __construct(
         private Repository $config,
         private Translator $translator,
+        private string $apiErrorRenderer = ErrorRenderer::class,
     ) {}
 
     /**
@@ -158,14 +163,15 @@ final readonly class TokenThrottle
     /**
      * Whether pushery/http-api-for-laravel answers the errors of this request, as it does from 0.4.0 on for a request of
      * the API. Its provider, once loaded, hands its renderer to Laravel's exception handler, which asks the renderer
-     * under the two switches read here. The package is no requirement: where it is not installed, where its provider
-     * is not loaded, or where a switch turns its errors off, the limiter answers itself.
+     * under the two switches read here. The package is no requirement: where it is not installed, where a version
+     * before 0.4.0 ships no renderer, where its provider is not loaded, or where a switch turns its errors off, the
+     * limiter answers itself.
      */
     private function answeredByTheApiPackage(Request $request): bool
     {
         $application = Container::getInstance();
 
-        if (! class_exists(HttpApiServiceProvider::class) || ! method_exists($application, 'providerIsLoaded') || $application->providerIsLoaded(HttpApiServiceProvider::class) !== true) {
+        if (! class_exists($this->apiErrorRenderer) || ! method_exists($application, 'providerIsLoaded') || $application->providerIsLoaded(HttpApiServiceProvider::class) !== true) {
             return false;
         }
 
@@ -173,7 +179,9 @@ final readonly class TokenThrottle
             return false;
         }
 
-        return $application->make(ErrorRenderer::class)->answersWithErrors($request);
+        $renderer = $application->make($this->apiErrorRenderer);
+
+        return $renderer instanceof ErrorRenderer && $renderer->answersWithErrors($request);
     }
 
     /**
